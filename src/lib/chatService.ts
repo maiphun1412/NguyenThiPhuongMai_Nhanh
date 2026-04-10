@@ -4,7 +4,7 @@ import { db } from "./firebase";
 export type FirebaseMessage = {
   id: string;
   name: string;
-  phone: string;
+  sessionKey: string;
   role: "user" | "bot";
   message: string;
   createdAt: number;
@@ -13,7 +13,7 @@ export type FirebaseMessage = {
 type SaveMessageParams = {
   sessionId: string;
   name: string;
-  phone: string;
+  sessionKey: string;
   role: "user" | "bot";
   message: string;
 };
@@ -23,7 +23,7 @@ const BASE_PATH = "nhanhtravel-website/maiphuong/chats";
 export async function saveMessageToFirebase({
   sessionId,
   name,
-  phone,
+  sessionKey,
   role,
   message,
 }: SaveMessageParams) {
@@ -32,7 +32,7 @@ export async function saveMessageToFirebase({
 
   await set(newMessageRef, {
     name,
-    phone,
+    sessionKey,
     role,
     message,
     createdAt: Date.now(),
@@ -56,10 +56,52 @@ export async function getMessagesFromFirebase(
     .map(([id, value]) => ({
       id,
       name: value.name || "",
-      phone: value.phone || "",
+      sessionKey: value.sessionKey || "",
       role: value.role || "user",
       message: value.message || "",
       createdAt: value.createdAt || 0,
     }))
     .sort((a, b) => a.createdAt - b.createdAt);
+}
+type SaveTrialFormParams = {
+  conversationId: string;
+  sessionKey: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  company: string;
+  service: string;
+  companySize: string;
+  note: string;
+};
+
+const TRIAL_FORM_PATH = "nhanhtravel-website/maiphuong/trial-forms";
+
+export async function saveTrialFormToFirebase({
+  conversationId,
+  sessionKey,
+  fullName,
+  email,
+  phone,
+  company,
+  service,
+  companySize,
+  note,
+}: SaveTrialFormParams) {
+  const formRef = ref(db, TRIAL_FORM_PATH);
+  const newRef = push(formRef);
+
+  await set(newRef, {
+    conversationId,
+    sessionKey,
+    fullName,
+    email,
+    phone,
+    company,
+    service,
+    companySize,
+    note,
+    createdAt: Date.now(),
+    status: "new",
+  });
 }

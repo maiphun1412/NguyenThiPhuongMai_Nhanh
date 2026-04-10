@@ -1,190 +1,47 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  saveCustomerInfo,
-  getCustomerInfo,
-  clearCurrentChatSession,
-} from "../../src/lib/session";
+
 import {
   getMessagesFromFirebase,
   saveMessageToFirebase,
+  saveTrialFormToFirebase,
 } from "../../src/lib/chatService";
-
-type Step = "lead" | "chat";
-
-type Message = {
-  id: number;
-  role: "bot" | "user";
-  text?: string;
-  images?: string[];
-};
-
-type AnswerItem = {
-  text: string;
-  images?: string[];
-};
-
-type ConversationItem = {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-const quickQuestions = [
-  "Nhanh Travel là gì?",
-  "Phù hợp với loại hình nào?",
-  "Xem giao diện thực tế.",
-  "Địa chỉ văn phòng ở đâu?",
-  "Quản lý tour ghép/đoàn thế nào?",
-  "Có App cho khách hàng không?",
-  "Bảng giá chi tiết.",
-  "Có tính năng kế toán/Hoa hồng không?",
-  "Quản lý công nợ nhà cung cấp.",
-  "CRM quản lý khách hàng.",
-];
-
-const answerMap: Record<string, AnswerItem> = {
-  "Nhanh Travel là gì?": {
-    text: "Nhanh Travel là nền tảng quản trị doanh nghiệp du lịch toàn diện, giúp số hóa toàn bộ quy trình vận hành từ bán hàng, chăm sóc khách hàng, điều hành tour đến quản lý tài chính. Hệ thống tích hợp CRM, quản lý báo giá, đơn hàng, điều hành tour, nhà cung cấp, công nợ, KPI nhân sự và báo cáo kinh doanh trên cùng một nền tảng duy nhất.",
-  },
-
-  "Phù hợp với loại hình nào?": {
-    text: "Phần mềm phù hợp với nhiều mô hình kinh doanh du lịch như: công ty du lịch nội địa, inbound, outbound, khu du lịch, nhà xe, khách sạn, hướng dẫn viên, đại lý vé và các đơn vị cung cấp dịch vụ du lịch. Ngoài ra hệ thống có thể tùy biến theo quy mô từ nhỏ đến lớn.",
-  },
-
-  "Xem giao diện thực tế.": {
-    text: "Dưới đây là một số giao diện thực tế của hệ thống Nhanh Travel:",
-    images: [
-      "/chatbox/gd1.png",
-      "/chatbox/gd2.png",
-      "/chatbox/gd3.png",
-      "/chatbox/gd4.png",
-    ],
-  },
-
-  "Địa chỉ văn phòng ở đâu?": {
-    text: "Văn phòng của Nhanh Travel hiện đặt tại 2A Nguyễn Sỹ Sách, Phường Tân Sơn, Thành phố Hồ Chí Minh, thuộc Công ty Cổ phần Đầu tư Phát triển Vigo. Nếu anh/chị cần hỗ trợ nhanh hoặc muốn được tư vấn trực tiếp, có thể liên hệ qua hotline (+84) 90 999 1205. Đội ngũ Nhanh Travel luôn sẵn sàng giải đáp thông tin, demo hệ thống và tư vấn giải pháp phù hợp với nhu cầu của doanh nghiệp. Anh/chị cũng có thể ghé trực tiếp văn phòng để trải nghiệm thực tế và trao đổi chi tiết hơn nhé!",
-  },
-
-  "Quản lý tour ghép/đoàn thế nào?": {
-    text: "Hệ thống hỗ trợ quản lý cả tour riêng và tour ghép. Doanh nghiệp có thể quản lý lịch khởi hành, số lượng khách, xe, tài xế, hướng dẫn viên, dịch vụ đi kèm và điều phối toàn bộ quá trình vận hành tour một cách tập trung và chính xác.",
-  },
-
-  "Có App cho khách hàng không?": {
-    text: "Có. Nhanh Travel có thể triển khai App khách hàng mang thương hiệu riêng của doanh nghiệp, giúp khách dễ dàng đặt tour, xem lịch trình, nhận thông báo, tích điểm, thanh toán và theo dõi toàn bộ dịch vụ ngay trên điện thoại. Việc sở hữu ứng dụng riêng không chỉ nâng cao trải nghiệm người dùng mà còn giúp doanh nghiệp xây dựng hình ảnh chuyên nghiệp và kết nối với khách hàng một cách hiệu quả hơn.",
-  },
-
-  "Bảng giá chi tiết.": {
-    text: "Bảng giá của Nhanh Travel gồm nhiều gói như Starter, Business và Enterprise với mức giá và số lượng user khác nhau. Mỗi gói đều tích hợp đầy đủ các tính năng quản lý khách hàng, đơn hàng, nhà cung cấp và điều hành tour, giúp doanh nghiệp dễ dàng lựa chọn giải pháp phù hợp với nhu cầu.",
-     images: [
-      "/chatbox/banggia.png",
-          ],
-  },
-
-  "Có tính năng kế toán/Hoa hồng không?": {
-    text: "Hệ thống hỗ trợ quản lý tài chính bao gồm: thu chi, công nợ, doanh thu, lợi nhuận, KPI và hoa hồng nhân sự. Doanh nghiệp có thể theo dõi hiệu quả kinh doanh theo từng tour, từng nhân viên và từng giai đoạn.",
-  },
-
-  "Quản lý công nợ nhà cung cấp.": {
-    text: "Hệ thống cho phép quản lý nhà cung cấp theo từng loại dịch vụ như xe, khách sạn, nhà hàng, hướng dẫn viên... Đồng thời theo dõi công nợ chi tiết giúp doanh nghiệp kiểm soát chi phí và dòng tiền hiệu quả.",
-  },
-
-  "CRM quản lý khách hàng.": {
-    text: "CRM giúp lưu trữ toàn bộ thông tin khách hàng, lịch sử giao dịch, phân loại nhóm khách, chăm sóc sau bán và theo dõi hành vi khách hàng. Ngoài ra có thể tích hợp Zalo, SMS, Email để tự động hóa marketing và chăm sóc khách hàng.",
-  },
-};
-
-const defaultBotMessage: Message = {
-  id: 1,
-  role: "bot",
-  text: "Em chào anh chị! Anh chị quan tâm các dịch vụ nào của Nhanhtravel ạ ?",
-};
-
-const CONVERSATION_MAP_KEY = "chat_customer_conversations";
-const CURRENT_CONVERSATION_ID_KEY = "chat_current_conversation_id";
-
-function normalizeCustomerKey(name: string, phone: string) {
-  return `${name.trim().toLowerCase().replace(/\s+/g, " ")}_${phone
-    .replace(/\D/g, "")
-    .trim()}`;
-}
-
-function generateConversationId() {
-  return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function getConversationMap(): Record<string, ConversationItem[]> {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = localStorage.getItem(CONVERSATION_MAP_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveConversationMap(map: Record<string, ConversationItem[]>) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(CONVERSATION_MAP_KEY, JSON.stringify(map));
-}
-
-function getConversationListForCustomer(customerKey: string) {
-  const map = getConversationMap();
-  return map[customerKey] || [];
-}
-
-function saveConversationListForCustomer(
-  customerKey: string,
-  conversations: ConversationItem[]
-) {
-  const map = getConversationMap();
-  map[customerKey] = conversations;
-  saveConversationMap(map);
-}
-
-function getCurrentConversationId() {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(CURRENT_CONVERSATION_ID_KEY) || "";
-}
-
-function setCurrentConversationId(conversationId: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(CURRENT_CONVERSATION_ID_KEY, conversationId);
-}
-
-function clearCurrentConversationId() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(CURRENT_CONVERSATION_ID_KEY);
-}
-
-function buildPreviewTitle(text: string) {
-  const cleaned = text.trim();
-  if (!cleaned) return "Cuộc trò chuyện mới";
-  return cleaned.length > 32 ? `${cleaned.slice(0, 32)}...` : cleaned;
-}
+import {
+  answerMap,
+  defaultBotMessage,
+  quickQuestions,
+  type ConversationItem,
+  type Message,
+  type Step,
+} from "../../src/lib/chatbot-data";
+import {
+  buildPreviewTitle,
+  clearCurrentConversationId,
+  generateConversationId,
+  getConversationListForSession,
+  getCurrentConversationId,
+  getOrCreateChatSessionId,
+  saveConversationListForSession,
+  setCurrentConversationId,
+} from "../../src/lib/chat-conversation";
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<Step>("lead");
+  const [step, setStep] = useState<Step>("chat");
   const [isTyping, setIsTyping] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [showInlineTrialForm, setShowInlineTrialForm] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const [leadForm, setLeadForm] = useState({
-    fullName: "",
-    phone: "",
-    agreed: true,
-  });
+  
 
   const [trialForm, setTrialForm] = useState({
     fullName: "",
@@ -199,16 +56,7 @@ export default function ChatWidget() {
 
   const [messages, setMessages] = useState<Message[]>([defaultBotMessage]);
 
-  const canStartLead = useMemo(() => {
-    const cleanedPhone = leadForm.phone.replace(/\D/g, "");
-
-    return (
-      leadForm.fullName.trim() !== "" &&
-      cleanedPhone.length >= 9 &&
-      cleanedPhone.length <= 12 &&
-      leadForm.agreed
-    );
-  }, [leadForm]);
+  
 
   const canSubmitTrial = useMemo(() => {
     const cleanedPhone = trialForm.phone.replace(/\D/g, "");
@@ -229,45 +77,42 @@ export default function ChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, step, showInlineTrialForm]);
 
-  const getActiveCustomer = () => {
-    const { name, phone } = getCustomerInfo();
-    const customerKey =
-      name && phone ? normalizeCustomerKey(name, phone) : "";
-
-    return { name, phone, customerKey };
-  };
+  const getActiveSession = () => {
+  const sessionKey = getOrCreateChatSessionId();
+  return { sessionKey };
+};
 
   const updateConversationMeta = (
-    conversationId: string,
-    updater: (item: ConversationItem) => ConversationItem
-  ) => {
-    const { customerKey } = getActiveCustomer();
-    if (!customerKey) return;
+  conversationId: string,
+  updater: (item: ConversationItem) => ConversationItem
+) => {
+  const { sessionKey } = getActiveSession();
+  if (!sessionKey) return;
 
-    const currentList = getConversationListForCustomer(customerKey);
-    const nextList = currentList.map((item) =>
-      item.id === conversationId ? updater(item) : item
-    );
+  const currentList = getConversationListForSession(sessionKey);
+  const nextList = currentList.map((item) =>
+    item.id === conversationId ? updater(item) : item
+  );
 
-    nextList.sort((a, b) => b.updatedAt - a.updatedAt);
+  nextList.sort((a, b) => b.updatedAt - a.updatedAt);
 
-    saveConversationListForCustomer(customerKey, nextList);
-    setConversations(nextList);
-  };
+  saveConversationListForSession(sessionKey, nextList);
+  setConversations(nextList);
+};
 
   const refreshConversationList = () => {
-    const { customerKey } = getActiveCustomer();
-    if (!customerKey) {
-      setConversations([]);
-      return [];
-    }
+  const { sessionKey } = getActiveSession();
+  if (!sessionKey) {
+    setConversations([]);
+    return [];
+  }
 
-    const list = getConversationListForCustomer(customerKey).sort(
-      (a, b) => b.updatedAt - a.updatedAt
-    );
-    setConversations(list);
-    return list;
-  };
+  const list = getConversationListForSession(sessionKey).sort(
+    (a, b) => b.updatedAt - a.updatedAt
+  );
+  setConversations(list);
+  return list;
+};
 
   const loadConversationById = async (conversationId: string) => {
     try {
@@ -298,63 +143,71 @@ export default function ChatWidget() {
   };
 
   const createNewConversation = async () => {
-    const { name, phone, customerKey } = getActiveCustomer();
-    if (!name || !phone || !customerKey) {
-      setStep("lead");
-      return;
-    }
+  const { sessionKey } = getActiveSession();
+  if (!sessionKey) return;
 
-    const newConversation: ConversationItem = {
-      id: generateConversationId(),
-      title: "Cuộc trò chuyện mới",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const currentList = getConversationListForCustomer(customerKey);
-    const nextList = [newConversation, ...currentList].sort(
-      (a, b) => b.updatedAt - a.updatedAt
-    );
-
-    saveConversationListForCustomer(customerKey, nextList);
-    setConversations(nextList);
-    setActiveConversationId(newConversation.id);
-    setCurrentConversationId(newConversation.id);
-
-    setMessages([defaultBotMessage]);
-    setChatInput("");
-    setShowInlineTrialForm(false);
-    setPreviewImage(null);
-    setIsTyping(false);
-    setStep("chat");
-
-    try {
-      await saveMessageToFirebase({
-        sessionId: newConversation.id,
-        name,
-        phone,
-        role: "bot",
-        message: defaultBotMessage.text || "",
-      });
-    } catch (error) {
-      console.error("Lỗi khi tạo conversation mới:", error);
-    }
+  const newConversation: ConversationItem = {
+    id: generateConversationId(),
+    title: "Cuộc trò chuyện mới",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
+
+  const currentList = getConversationListForSession(sessionKey);
+  const nextList = [newConversation, ...currentList].sort(
+    (a, b) => b.updatedAt - a.updatedAt
+  );
+
+  saveConversationListForSession(sessionKey, nextList);
+  setConversations(nextList);
+  setActiveConversationId(newConversation.id);
+  setCurrentConversationId(newConversation.id);
+
+  setMessages([defaultBotMessage]);
+  setChatInput("");
+  setShowInlineTrialForm(false);
+  setPreviewImage(null);
+  setIsTyping(false);
+  setStep("chat");
+  setShowSuggestions(true);
+
+  try {
+    await saveMessageToFirebase({
+  sessionId: newConversation.id,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: defaultBotMessage.text || "",
+});
+  } catch (error) {
+    console.error("Lỗi khi tạo conversation mới:", error);
+  }
+};
 
   const ensureConversationReady = async () => {
-    if (activeConversationId) return activeConversationId;
+  if (activeConversationId && activeConversationId.trim() !== "") {
+    return activeConversationId;
+  }
 
-    const list = refreshConversationList();
-    if (list.length > 0) {
-      const selectedId = getCurrentConversationId() || list[0].id;
-      setActiveConversationId(selectedId);
-      setCurrentConversationId(selectedId);
-      return selectedId;
-    }
+  const savedConversationId = getCurrentConversationId();
+  if (savedConversationId && savedConversationId.trim() !== "") {
+    setActiveConversationId(savedConversationId);
+    return savedConversationId;
+  }
 
-    await createNewConversation();
-    return getCurrentConversationId();
-  };
+  const list = refreshConversationList();
+  if (list.length > 0) {
+    const selectedId = list[0].id;
+    setActiveConversationId(selectedId);
+    setCurrentConversationId(selectedId);
+    return selectedId;
+  }
+
+  await createNewConversation();
+
+  const newId = getCurrentConversationId();
+  return newId || "";
+};
 
   const maybePromoteConversationTitle = (
     conversationId: string,
@@ -373,128 +226,98 @@ export default function ChatWidget() {
   };
 
   useEffect(() => {
-    const boot = async () => {
-      const savedCustomer = getCustomerInfo();
+  const boot = async () => {
+    const sessionKey = getOrCreateChatSessionId();
+    if (!sessionKey) return;
 
-      if (savedCustomer.name || savedCustomer.phone) {
-        setLeadForm((prev) => ({
-          ...prev,
-          fullName: savedCustomer.name,
-          phone: savedCustomer.phone,
-        }));
-      }
-
-      if (!savedCustomer.name || !savedCustomer.phone) return;
-
-      const customerKey = normalizeCustomerKey(
-        savedCustomer.name,
-        savedCustomer.phone
-      );
-
-      const list = getConversationListForCustomer(customerKey).sort(
-        (a, b) => b.updatedAt - a.updatedAt
-      );
-
-      setConversations(list);
-
-      if (list.length === 0) return;
-
-      const currentConversationId = getCurrentConversationId();
-      const selectedId = list.some((item) => item.id === currentConversationId)
-        ? currentConversationId
-        : list[0].id;
-
-      await loadConversationById(selectedId);
-    };
-
-    boot();
-  }, []);
-
-  const fakeBotReply = async (
-    question: string,
-    answer: string,
-    images: string[] = []
-  ) => {
-    setShowInlineTrialForm(false);
-
-    const { name, phone } = getCustomerInfo();
-    if (!name || !phone) return;
-
-    const conversationId = await ensureConversationReady();
-    if (!conversationId) return;
-
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
-      role: "user",
-      message: question,
-    });
-
-    maybePromoteConversationTitle(conversationId, question);
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: question,
-      },
-    ]);
-
-    setIsTyping(true);
-
-    setTimeout(async () => {
-      await saveMessageToFirebase({
-        sessionId: conversationId,
-        name,
-        phone,
-        role: "bot",
-        message: answer,
-      });
-
-      updateConversationMeta(conversationId, (item) => ({
-        ...item,
-        updatedAt: Date.now(),
-      }));
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: answer,
-          images,
-        },
-      ]);
-      setIsTyping(false);
-      setStep("chat");
-    }, 800);
-  };
-
-  const handleLeadStart = async () => {
-    if (!canStartLead) return;
-
-    const cleanName = leadForm.fullName.trim();
-    const cleanPhone = leadForm.phone.replace(/\D/g, "");
-
-    saveCustomerInfo(cleanName, cleanPhone);
-
-    const customerKey = normalizeCustomerKey(cleanName, cleanPhone);
-    const list = getConversationListForCustomer(customerKey).sort(
+    const list = getConversationListForSession(sessionKey).sort(
       (a, b) => b.updatedAt - a.updatedAt
     );
 
     setConversations(list);
 
-    if (list.length > 0) {
-      const selectedId = getCurrentConversationId() || list[0].id;
-      await loadConversationById(selectedId);
-      return;
-    }
+    if (list.length === 0) return;
 
-    await createNewConversation();
+    const currentConversationId = getCurrentConversationId();
+    const selectedId = list.some((item) => item.id === currentConversationId)
+      ? currentConversationId
+      : list[0].id;
+
+    await loadConversationById(selectedId);
   };
+
+  boot();
+}, []);
+
+  const fakeBotReply = async (
+  question: string,
+  answer: string,
+  images: string[] = []
+) => {
+  setShowInlineTrialForm(false);
+
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
+
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
+
+  // 1. Lưu user
+  await saveMessageToFirebase({
+    sessionId: conversationId,
+    name: "anonymous",
+    sessionKey,
+    role: "user",
+    message: question,
+  });
+
+  maybePromoteConversationTitle(conversationId, question);
+
+  // 2. Hiển thị user
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: prev.length + 1,
+      role: "user",
+      text: question,
+    },
+  ]);
+
+  setIsTyping(true);
+
+  // 3. delay bot
+  setTimeout(async () => {
+    // hiển thị bot trước
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: prev.length + 1,
+        role: "bot",
+        text: answer,
+        images,
+      },
+    ]);
+
+    // rồi mới lưu DB
+    await saveMessageToFirebase({
+      sessionId: conversationId,
+      name: "anonymous",
+      sessionKey,
+      role: "bot",
+      message: answer,
+    });
+
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
+
+    setIsTyping(false);
+    setStep("chat");
+  }, 800);
+};
+
+  
 
   const closeInlineTrialForm = () => {
     setShowInlineTrialForm(false);
@@ -510,83 +333,56 @@ export default function ChatWidget() {
     });
   };
 
-  const handleLogout = () => {
-    clearCurrentChatSession();
-    clearCurrentConversationId();
-
-    setLeadForm({
-      fullName: "",
-      phone: "",
-      agreed: true,
-    });
-
-    setTrialForm({
-      fullName: "",
-      email: "",
-      phone: "",
-      company: "",
-      service: "",
-      companySize: "",
-      note: "",
-      agreed: true,
-    });
-
-    setConversations([]);
-    setActiveConversationId("");
-    setMessages([defaultBotMessage]);
-    setChatInput("");
-    setShowInlineTrialForm(false);
-    setPreviewImage(null);
-    setIsTyping(false);
-    setStep("lead");
-  };
+  
 
   const openTrialFormInline = async (questionText: string) => {
-    const { name, phone } = getCustomerInfo();
-    if (!name || !phone) return;
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
 
-    const conversationId = await ensureConversationReady();
-    if (!conversationId) return;
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
 
-    const botText = "Vui lòng điền những thông tin dưới đây";
+  const botText = "Vui lòng điền những thông tin dưới đây";
 
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
+  await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "user",
+  message: questionText,
+});
+
+await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: botText,
+});
+
+  maybePromoteConversationTitle(conversationId, questionText);
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: prev.length + 1,
       role: "user",
-      message: questionText,
-    });
-
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
+      text: questionText,
+    },
+    {
+      id: prev.length + 2,
       role: "bot",
-      message: botText,
-    });
+      text: botText,
+    },
+  ]);
 
-    maybePromoteConversationTitle(conversationId, questionText);
+  setShowInlineTrialForm(true);
+  setStep("chat");
+};
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: questionText,
-      },
-      {
-        id: prev.length + 2,
-        role: "bot",
-        text: botText,
-      },
-    ]);
-
-    setShowInlineTrialForm(true);
-    setStep("chat");
-  };
-
+  
   const handleQuickQuestion = async (question: string) => {
+    setShowSuggestions(false);
     if (question === "Làm sao để đăng ký dùng thử 15 ngày?") {
       await openTrialFormInline(question);
       return;
@@ -600,176 +396,185 @@ export default function ChatWidget() {
   };
 
   const handleSendCustomMessage = async () => {
-    const value = chatInput.trim();
-    if (!value || isTyping) return;
+  const value = chatInput.trim();
+  if (!value || isTyping) return;
+  setShowSuggestions(false);
 
-    const { name, phone } = getCustomerInfo();
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
 
-    if (!name || !phone) {
-      alert("Vui lòng nhập tên và số điện thoại trước");
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
+
+await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "user",
+  message: value,
+});
+
+  maybePromoteConversationTitle(conversationId, value);
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: prev.length + 1,
+      role: "user",
+      text: value,
+    },
+  ]);
+
+  setChatInput("");
+  setIsTyping(true);
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: value }),
+    });
+
+    const data = await res.json();
+    const botAnswer =
+      data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
+
+    await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: botAnswer,
+});
+
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: prev.length + 1,
+        role: "bot",
+        text: botAnswer,
+      },
+    ]);
+
+    if (data.action === "open_trial_form") {
+      setShowInlineTrialForm(true);
+      setStep("chat");
       return;
     }
 
-    const conversationId = await ensureConversationReady();
-    if (!conversationId) return;
+    setShowInlineTrialForm(false);
+    setStep("chat");
+  } catch (error) {
+    console.error("Lỗi khi gọi API chat:", error);
 
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
-      role: "user",
-      message: value,
-    });
+    const errorText =
+      "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
 
-    maybePromoteConversationTitle(conversationId, value);
+await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: errorText,
+});
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: value,
-      },
-    ]);
-
-    setChatInput("");
-    setIsTyping(true);
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: value }),
-      });
-
-      const data = await res.json();
-      const botAnswer =
-        data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
-
-      await saveMessageToFirebase({
-        sessionId: conversationId,
-        name,
-        phone,
-        role: "bot",
-        message: botAnswer,
-      });
-
-      updateConversationMeta(conversationId, (item) => ({
-        ...item,
-        updatedAt: Date.now(),
-      }));
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: botAnswer,
-        },
-      ]);
-
-      if (data.action === "open_trial_form") {
-        setShowInlineTrialForm(true);
-        setStep("chat");
-        return;
-      }
-
-      setShowInlineTrialForm(false);
-      setStep("chat");
-    } catch (error) {
-      console.error("Lỗi khi gọi API chat:", error);
-
-      const errorText =
-        "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
-
-      await saveMessageToFirebase({
-        sessionId: conversationId,
-        name,
-        phone,
-        role: "bot",
-        message: errorText,
-      });
-
-      updateConversationMeta(conversationId, (item) => ({
-        ...item,
-        updatedAt: Date.now(),
-      }));
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: errorText,
-        },
-      ]);
-
-      setShowInlineTrialForm(false);
-      setStep("chat");
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const handleSubmitTrial = async () => {
-    if (!canSubmitTrial) return;
-
-    const { name, phone } = getCustomerInfo();
-    if (!name || !phone) return;
-
-    const conversationId = await ensureConversationReady();
-    if (!conversationId) return;
-
-    const userText = "Tôi muốn đăng ký dùng thử demo.";
-    const botText = `Cảm ơn ${trialForm.fullName}. Chúng tôi đã ghi nhận thông tin của bạn và sẽ liên hệ lại với bạn thông qua số điện thoại ${trialForm.phone}.`;
-
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
-      role: "user",
-      message: userText,
-    });
-
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name,
-      phone,
-      role: "bot",
-      message: botText,
-    });
-
-    maybePromoteConversationTitle(conversationId, userText);
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
 
     setMessages((prev) => [
       ...prev,
       {
         id: prev.length + 1,
-        role: "user",
-        text: userText,
-      },
-      {
-        id: prev.length + 2,
         role: "bot",
-        text: botText,
+        text: errorText,
       },
     ]);
-
-    setTrialForm({
-      fullName: "",
-      email: "",
-      phone: "",
-      company: "",
-      service: "",
-      companySize: "",
-      note: "",
-      agreed: true,
-    });
 
     setShowInlineTrialForm(false);
     setStep("chat");
+  } finally {
+    setIsTyping(false);
+  }
+};
+
+  const handleSubmitTrial = async () => {
+  if (!canSubmitTrial) return;
+
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
+
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
+
+  const userText = "Tôi muốn đăng ký dùng thử demo.";
+  const botText = `Cảm ơn ${trialForm.fullName}. Chúng tôi đã ghi nhận thông tin của bạn và sẽ liên hệ lại với bạn thông qua số điện thoại ${trialForm.phone}.`;
+
+  await saveTrialFormToFirebase({
+  conversationId,
+  sessionKey,
+  fullName: trialForm.fullName,
+  email: trialForm.email,
+  phone: trialForm.phone,
+  company: trialForm.company,
+  service: trialForm.service,
+  companySize: trialForm.companySize,
+  note: trialForm.note,
+});
+
+  await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "user",
+  message: userText,
+  });
+
+  await saveMessageToFirebase({
+  sessionId: conversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: botText,
+  });
+
+  maybePromoteConversationTitle(conversationId, userText);
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: prev.length + 1,
+      role: "user",
+      text: userText,
+    },
+    {
+      id: prev.length + 2,
+      role: "bot",
+      text: botText,
+    },
+  ]);
+
+  setTrialForm({
+    fullName: "",
+    email: "",
+    phone: "",
+    company: "",
+    service: "",
+    companySize: "",
+    note: "",
+    agreed: true,
+  });
+
+  setShowInlineTrialForm(false);
+  setStep("chat");
   };
 
   if (!open) {
@@ -821,7 +626,7 @@ export default function ChatWidget() {
             </div>
 
             <div className="flex items-center gap-2">
-              {step === "chat" && (
+              {/* {step === "chat" && (
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -830,7 +635,7 @@ export default function ChatWidget() {
                 >
                   Đăng xuất
                 </button>
-              )}
+              )} */}
 
               <button
                 type="button"
@@ -857,78 +662,7 @@ export default function ChatWidget() {
               isExpanded ? "h-[78vh]" : "h-[610px]"
             }`}
           >
-            {step === "lead" && (
-              <div className="chat-scrollbar flex h-full items-start justify-center overflow-y-auto px-5 pt-[74px] pb-8">
-                <div className="chat-lead-glow w-full max-w-[300px]">
-                  <div className="relative z-10 rounded-[18px] bg-white px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
-                    <h3 className="mb-5 text-center text-[16px] font-semibold leading-[24px] text-[#121826]">
-                      Vui lòng cung cấp thông tin để
-                      <br />
-                      được tư vấn miễn phí
-                    </h3>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="mb-1.5 block text-[13px] font-medium text-[#2d2f33]">
-                          Họ và tên <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          value={leadForm.fullName}
-                          onChange={(e) =>
-                            setLeadForm({
-                              ...leadForm,
-                              fullName: e.target.value,
-                            })
-                          }
-                          placeholder="Vui lòng nhập họ tên"
-                          className="h-[40px] w-full rounded-[10px] border border-[#ebedf0] bg-white px-3 text-[13px] text-[#111827] outline-none transition placeholder:text-[#d0d4db] focus:border-[#2992ff]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-[13px] font-medium text-[#2d2f33]">
-                          Số điện thoại <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          value={leadForm.phone}
-                          onChange={(e) =>
-                            setLeadForm({
-                              ...leadForm,
-                              phone: e.target.value
-                                .replace(/\D/g, "")
-                                .slice(0, 12),
-                            })
-                          }
-                          placeholder="Vui lòng nhập số điện thoại"
-                          inputMode="numeric"
-                          className="h-[40px] w-full rounded-[10px] border border-[#ebedf0] bg-white px-3 text-[13px] text-[#111827] outline-none transition placeholder:text-[#d0d4db] focus:border-[#2992ff]"
-                        />
-
-                        {leadForm.phone.length > 0 &&
-                          (leadForm.phone.length < 9 ||
-                            leadForm.phone.length > 12) && (
-                            <p className="mt-1 text-[12px] text-red-500">
-                              Số điện thoại phải từ 9 đến 12 chữ số.
-                            </p>
-                          )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleLeadStart}
-                        className={`mt-1 h-[38px] cursor-pointer rounded-[9px] px-5 text-[14px] font-semibold text-white transition ${
-                          canStartLead
-                            ? "bg-[#2c8fff] hover:opacity-95"
-                            : "cursor-not-allowed bg-[#9ec5ff]"
-                        }`}
-                      >
-                        Bắt đầu
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            
 
             {step === "chat" && (
               <div className="flex h-full">
@@ -1195,14 +929,31 @@ export default function ChatWidget() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="shrink-0 px-3 pb-1 pt-2">
-                    <QuestionGrid
-                      items={quickQuestions}
-                      onClick={handleQuickQuestion}
-                      className="mb-1"
-                      isExpanded={isExpanded}
-                    />
-                  </div>
+                 <div className="shrink-0 px-3 pb-1 pt-2">
+  <button
+    type="button"
+    onClick={() => setShowSuggestions((prev) => !prev)}
+    className="mb-2 flex cursor-pointer items-center gap-1 px-1 text-[12px] font-medium text-[#0099FF]"
+  >
+    <span>Câu hỏi gợi ý</span>
+    <span
+      className={`inline-block text-[10px] transition-transform duration-200 ${
+        showSuggestions ? "rotate-180" : "rotate-0"
+      }`}
+    >
+      ⌃
+    </span>
+  </button>
+
+  {showSuggestions && (
+    <QuestionGrid
+      items={quickQuestions}
+      onClick={handleQuickQuestion}
+      className="mb-1"
+      isExpanded={isExpanded}
+    />
+  )}
+</div>
 
                   <div className="shrink-0">
                     <ChatInput
@@ -1335,9 +1086,7 @@ function QuestionGrid({
         isExpanded ? "max-w-none px-1" : "max-w-[366px]"
       } ${className}`}
     >
-      <div
-        className={`flex flex-wrap justify-start gap-x-2 gap-y-2`}
-      >
+      <div className="flex flex-wrap justify-start gap-x-2 gap-y-2">
         {items.map((item) => (
           <button
             key={item}
