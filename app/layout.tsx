@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
+import ChatWidget from "./components/ChatWidget";
 
 const beVietnamPro = Be_Vietnam_Pro({
   subsets: ["latin", "vietnamese"],
@@ -15,12 +16,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="vi">
-      <body className={beVietnamPro.className}>{children}</body>
+      <body className={beVietnamPro.className}>
+        {children}
+
+        {/* CHAT GLOBAL – LUÔN HIỆN Ở MỌI PAGE */}
+        <ChatWidget />
+      </body>
     </html>
   );
 }

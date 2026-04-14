@@ -141,3 +141,33 @@ a {
     transform: scale(1);
   }
 }
+.demo-input {
+  width: 100%;
+  height: 46px;
+  border-radius: 10px;
+  border: 1px solid #dbe3ee;
+  background: #fff;
+  padding: 0 14px;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}
+
+.demo-input:focus {
+  border-color: #4aa8ff;
+  box-shadow: 0 0 0 3px rgba(35, 136, 255, 0.12);
+}
+.chat-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  right: 30px; /* chỉnh để trỏ đúng icon */
+  width: 12px;
+  height: 12px;
+  background: white;
+
+  border-left: 1px solid #e6f0ff;
+  border-bottom: 1px solid #e6f0ff;
+
+  transform: rotate(45deg);
+}

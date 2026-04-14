@@ -1,4 +1,4 @@
-import ChatWidget from "./components/ChatWidget";
+import AdvantagesSection from "./components/AdvantagesSection";
 import Image from "next/image";
 import { Search } from "lucide-react";
 import EcosystemSection from "./components/EcosystemSection";
@@ -6,9 +6,9 @@ import EcosystemSection from "./components/EcosystemSection";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f6f7fb] text-[#1f2937]">
+   <main className="min-h-screen bg-white text-[#1f2937]">
       {/* Header */}
-      <header className="sticky top-0 z-30 w-full border-b border-[#e5e7eb] bg-white">
+      <header className="sticky top-0 z-30 w-full border-b border-[#FFFFFF] bg-white">
         <div className="mx-auto flex w-full max-w-[1600px] items-center px-10 py-4">
           {/* LOGO */}
           <div className="flex items-center">
@@ -23,30 +23,29 @@ export default function HomePage() {
           <div className="ml-auto flex items-center gap-8">
             {/* MENU */}
             <nav className="hidden items-center gap-8 text-[15px] font-medium text-[#6b7280] md:flex">
-              <a href="#" className="flex items-center gap-2 text-[#1677ff]">
-                <span className="h-2 w-2 rounded-full bg-[#1677ff]"></span>
-                TRANG CHỦ
-              </a>
+  <a
+    href="#"
+    className="flex items-center gap-2 rounded-md px-2 py-1 text-[#1677ff] transition-all duration-200 hover:scale-105 hover:bg-[#f0f6ff]"
+  >
+    <span className="h-2 w-2 rounded-full bg-[#1677ff]"></span>
+    TRANG CHỦ
+  </a>
 
-              <a href="#" className="hover:text-[#1677ff]">
-                TÍNH NĂNG
-              </a>
-              <a href="#" className="hover:text-[#1677ff]">
-                SẢN PHẨM
-              </a>
-              <a href="#" className="hover:text-[#1677ff]">
-                GIẢI PHÁP
-              </a>
-              <a href="#" className="hover:text-[#1677ff]">
-                BẢNG GIÁ
-              </a>
-              <a href="#" className="hover:text-[#1677ff]">
-                BLOG
-              </a>
-              <a href="#" className="hover:text-[#1677ff]">
-                VỀ CHÚNG TÔI
-              </a>
-            </nav>
+  {["TÍNH NĂNG", "SẢN PHẨM", "GIẢI PHÁP", "BẢNG GIÁ", "BLOG", "VỀ CHÚNG TÔI"].map(
+    (item) => (
+      <a
+        key={item}
+        href="#"
+        className="group relative rounded-md px-2 py-1 transition-all duration-200 hover:scale-105 hover:bg-[#f0f6ff] hover:text-[#1677ff]"
+      >
+        {item}
+
+        {/* underline animation */}
+        <span className="absolute left-0 -bottom-1 h-[2px] w-0 bg-[#1677ff] transition-all duration-300 group-hover:w-full"></span>
+      </a>
+    )
+  )}
+</nav>
 
             {/* ICON */}
             <div className="flex items-center gap-4">
@@ -103,9 +102,15 @@ export default function HomePage() {
             </ul>
 
             <div className="mt-2 flex flex-wrap items-center gap-4 sm:gap-6">
-              <button className="min-w-[150px] rounded-full bg-[#f45b96] px-10 py-[10px] text-center text-[19px] font-extrabold uppercase tracking-[-0.2px] text-white shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition-all duration-300 hover:bg-[#66FF66] hover:text-[#0b2a7a] hover:shadow-[0_14px_32px_rgba(0,0,0,0.25)]">
-                ĐĂNG KÝ NGAY
-              </button>
+              <a
+  href="https://demo.nhanhtravel.com/RegisterDemo/register_demo_form"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <button className="min-w-[150px] rounded-full bg-[#f45b96] px-10 py-[10px] text-center text-[19px] font-extrabold uppercase tracking-[-0.2px] text-white shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition-all duration-300 hover:bg-[#66FF66] hover:text-[#0b2a7a] hover:shadow-[0_14px_32px_rgba(0,0,0,0.25)]">
+    ĐĂNG KÝ NGAY
+  </button>
+</a>
 
               <button className="min-w-[150px] rounded-full bg-[#6f8fff] px-10 py-[10px] text-center text-[19px] font-extrabold uppercase tracking-[-0.2px] text-white shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition-all duration-300 hover:bg-[#66FF66] hover:text-[#0b2a7a] hover:shadow-[0_14px_32px_rgba(0,0,0,0.25)]">
                 LIÊN HỆ TƯ VẤN
@@ -140,7 +145,7 @@ export default function HomePage() {
       </section>
 
       {/* Features */}
-<section className="relative bg-[#f7f8fc]">
+<section className="relative bg-white">
   <div className="mx-auto max-w-[1400px] px-6 py-10 md:px-10 lg:px-16">
     <div className="grid grid-cols-1 items-stretch gap-10 text-center md:grid-cols-2 lg:grid-cols-4">
       {[
@@ -172,11 +177,12 @@ export default function HomePage() {
           <div className="flex h-full w-full flex-col rounded-2xl p-4 transition-all duration-300 group-hover:bg-[#B0E2FF]/35">
             <div className="relative mb-5 h-[180px] w-full overflow-hidden">
               <Image
-                src={item.img}
-                alt={item.title}
-                fill
-                className="object-contain transition-transform duration-300 group-hover:scale-105"
-              />
+  src={item.img}
+  alt={item.title}
+  fill
+  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 25vw"
+  className="object-contain transition-transform duration-300 group-hover:scale-105"
+/>
             </div>
 
             <h3 className="mb-3 text-[18px] font-semibold text-[#1677ff] md:text-[20px]"> 
@@ -194,23 +200,22 @@ export default function HomePage() {
 </section>
 
       {/* Giải pháp chuyển đổi số */}
-<section className="relative bg-[#f7f8fc] py-4">
+<section className="relative bg-white  py-4">
   <div className="mx-auto max-w-[1450px] px-6 pb-10 md:px-10 lg:px-16">
-    <h2 className="mb-8 text-center text-[27px] font-extrabold leading-tight text-[#1457c7] md:text-[40px] lg:text-[50px]">
-      Nhanh Travel - Giải pháp chuyển đổi số
-      <br />
-      hàng đầu cho doanh nghiệp du lịch
-    </h2>
+    <h2 className="mx-auto mb-8 max-w-[1100px] text-center text-[27px] font-extrabold leading-tight text-[#1457c7] md:text-[40px] lg:text-[50px]">
+  Nhanh Travel - Giải pháp chuyển đổi số hàng đầu cho doanh nghiệp du lịch
+</h2>
 
     {/* Ảnh bên trái desktop */}
     <div className="group absolute left-[3%] top-1/2 z-10 hidden -translate-y-1/2 lg:block xl:left-[4%]">
       <Image
-        src="/trangchu/Giaiphaphangdau.png"
-        alt="Giải pháp Nhanh Travel"
-        width={620}
-        height={760}
-        className="h-auto w-[32vw] min-w-[320px] max-w-[560px] object-contain opacity-90 transition-transform duration-500 ease-out group-hover:scale-105 group-hover:rotate-2"
-      />
+  src="/trangchu/Giaiphaphangdau.png"
+  alt="Giải pháp Nhanh Travel"
+  width={620}
+  height={760}
+  style={{ width: "32vw", height: "auto" }}
+  className="min-w-[320px] max-w-[560px] object-contain opacity-90 transition-transform duration-500 ease-out group-hover:scale-105 group-hover:rotate-2"
+/>
     </div>
 
     {/* Card desktop */}
@@ -243,12 +248,12 @@ export default function HomePage() {
         >
           <div className="mb-6 flex justify-center">
             <Image
-              src={item.icon}
-              alt={item.title}
-              width={70}
-              height={70}
-              className="h-[75px] w-[75px] object-contain"
-            />
+  src={item.icon}
+  alt={item.title}
+  width={75}
+  height={75}
+  className="object-contain"
+/>
           </div>
 
           <h3 className="mb-5 text-center text-[22px] font-bold text-[#1457c7] xl:text-[24px]">
@@ -266,12 +271,13 @@ export default function HomePage() {
     <div className="lg:hidden">
       <div className="mb-10 flex justify-center">
         <Image
-          src="/trangchu/Giaiphaphangdau.png"
-          alt="Giải pháp Nhanh Travel"
-          width={560}
-          height={700}
-          className="h-auto w-full max-w-[560px] object-contain"
-        />
+  src="/trangchu/Giaiphaphangdau.png"
+  alt="Giải pháp Nhanh Travel"
+  width={560}
+  height={700}
+  style={{ width: "100%", height: "auto" }}
+  className="max-w-[560px] object-contain"
+/>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -303,12 +309,12 @@ export default function HomePage() {
           >
             <div className="mb-6 flex justify-center">
               <Image
-                src={item.icon}
-                alt={item.title}
-                width={70}
-                height={70}
-                className="h-[70px] w-[70px] object-contain"
-              />
+  src={item.icon}
+  alt={item.title}
+  width={70}
+  height={70}
+  className="object-contain"
+/>
             </div>
 
             <h3 className="mb-5 text-center text-[22px] font-bold text-[#1457c7]">
@@ -326,7 +332,7 @@ export default function HomePage() {
 </section>
 
 {/* Why choose */}
-<section className="relative bg-[#f7f8fc]">
+<section className="relative bg-white">
   <div className="mx-auto max-w-[1500px] px-6 md:px-10 lg:px-16">
     {/* Title + Button */}
     <div className="text-center">
@@ -336,9 +342,14 @@ export default function HomePage() {
         phần mềm du lịch Nhanh Travel
       </h2>
 
-      <button className="mt-8 rounded-full bg-[#f45b96] px-10 py-4 text-[16px] font-extrabold text-white shadow-[0_12px_28px_rgba(244,91,150,0.28)] transition hover:scale-[1.02]">
-        Đăng Ký Dùng Thử
-      </button>
+      <a
+  href="https://demo.nhanhtravel.com/RegisterDemo/register_demo_form"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-8 inline-flex items-center justify-center rounded-full bg-[#f45b96] px-10 py-4 text-[16px] font-extrabold text-white shadow-[0_12px_28px_rgba(244,91,150,0.28)] transition hover:scale-[1.02]"
+>
+  Đăng Ký Dùng Thử
+</a>
     </div>
 
     {/* Content */}
@@ -377,12 +388,12 @@ export default function HomePage() {
 
             <div className="order-1 shrink-0 lg:order-2">
               <Image
-                src={item.icon}
-                alt={item.title}
-                width={56}
-                height={56}
-                className="h-[56px] w-[56px] object-contain"
-              />
+  src={item.icon}
+  alt={item.title}
+  width={56}
+  height={56}
+  className="object-contain"
+/>
             </div>
           </div>
         ))}
@@ -391,14 +402,13 @@ export default function HomePage() {
       {/* CENTER */}
 <div className="flex justify-center">
   <Image
-    src="/trangchu/why-center.png"
-    alt="Lý do chọn Nhanh Travel"
-    width={560}
-    height={700}
-    className="h-auto w-full max-w-[560px] object-contain 
-    transition-transform duration-300 ease-out 
-    hover:-translate-y-4"
-  />
+  src="/trangchu/why-center.png"
+  alt="Lý do chọn Nhanh Travel"
+  width={560}
+  height={700}
+  className="w-full max-w-[560px] object-contain transition-transform duration-300 ease-out hover:-translate-y-4"
+  style={{ height: "auto" }}
+/>
 </div>
 
       {/* RIGHT */}
@@ -426,12 +436,12 @@ export default function HomePage() {
           >
             <div className="shrink-0">
               <Image
-                src={item.icon}
-                alt={item.title}
-                width={56}
-                height={56}
-                className="h-[56px] w-[56px] object-contain"
-              />
+  src={item.icon}
+  alt={item.title}
+  width={56}
+  height={56}
+  className="object-contain"
+/>
             </div>
 
             <div className="max-w-[330px]">
@@ -450,7 +460,7 @@ export default function HomePage() {
 </section>
 
       <EcosystemSection />
-
+        <AdvantagesSection />
       {/* Big app showcase */}
       <section className="bg-[#1143a7] pt-5">
         <div className="mx-auto max-w-[1600px] px-4 md:px-8 lg:px-12">
@@ -583,7 +593,6 @@ export default function HomePage() {
         </div>
       </footer>
 
-      <ChatWidget />
     </main>
   );
 }
