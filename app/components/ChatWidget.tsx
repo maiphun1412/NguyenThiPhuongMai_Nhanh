@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 
 import {
   getMessagesFromFirebase,
@@ -28,6 +29,7 @@ const DEMO_REGISTER_URL =
   "https://demo.nhanhtravel.com/RegisterDemo/register_demo_form";
 
 const REGISTER_QUESTION = "Đăng ký sử dụng demo";
+const GUIDE_QUESTION = "Hướng dẫn sử dụng";
 
 const FOLLOW_UP_MAP: Record<string, string[]> = {
   "Nhanh Travel là gì?": [
@@ -58,10 +60,12 @@ const FOLLOW_UP_MAP: Record<string, string[]> = {
 };
 
 const INITIAL_SUGGESTIONS = Array.from(
-  new Set([...quickQuestions, REGISTER_QUESTION])
+  new Set([...quickQuestions, GUIDE_QUESTION, REGISTER_QUESTION])
 );
 
 export default function ChatWidget() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("chat");
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(false);
@@ -91,14 +95,20 @@ const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
 
   
 useEffect(() => {
+  // chỉ hiện ở trang chủ "/"
+  if (pathname !== "/") {
+    setShowWelcomeBubble(false);
+    return;
+  }
+
   setShowWelcomeBubble(true);
 
   const timer = setTimeout(() => {
     setShowWelcomeBubble(false);
-  }, 10000); // 10 giây
+  }, 10000);
 
   return () => clearTimeout(timer);
-}, []);
+}, [pathname]);
 
   const getActiveSession = () => {
     const sessionKey = getOrCreateChatSessionId();
@@ -108,6 +118,11 @@ useEffect(() => {
   const goToRegisterDemo = () => {
     window.open(DEMO_REGISTER_URL, "_blank", "noopener,noreferrer");
   };
+const goToGuidePage = () => {
+  setOpen(false);
+  setShowWelcomeBubble(false);
+  router.push("/huong-dan-su-dung");
+};
 
   const buildNextSuggestions = (question: string) => {
     const followUps = FOLLOW_UP_MAP[question];
@@ -401,22 +416,76 @@ useEffect(() => {
   };
 
   const handleQuickQuestion = async (question: string) => {
-    setShowSuggestions(false);
+  setShowSuggestions(false);
 
-    if (
-      question === "Làm sao để đăng ký dùng thử 15 ngày?" ||
-      question === REGISTER_QUESTION
-    ) {
-      await openTrialFormInline(question);
-      return;
-    }
+if (question === GUIDE_QUESTION) {
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
+
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
+
+  const botText =
+    "Mình sẽ mở trang hướng dẫn sử dụng để bạn xem chi tiết nhé.";
+
+  await saveMessageToFirebase({
+    sessionId: conversationId,
+    name: "anonymous",
+    sessionKey,
+    role: "user",
+    message: question,
+  });
+
+  await saveMessageToFirebase({
+    sessionId: conversationId,
+    name: "anonymous",
+    sessionKey,
+    role: "bot",
+    message: botText,
+  });
+
+  maybePromoteConversationTitle(conversationId, question);
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: prev.length + 1,
+      role: "user",
+      text: question,
+    },
+    {
+      id: prev.length + 2,
+      role: "bot",
+      text: botText,
+    },
+  ]);
+
+  setStep("chat");
+  setSuggestedQuestions(INITIAL_SUGGESTIONS);
+
+ 
+
+  setTimeout(() => {
+    goToGuidePage();
+  }, 200);
+
+  return;
+}
+
+  if (
+    question === "Làm sao để đăng ký dùng thử 15 ngày?" ||
+    question === REGISTER_QUESTION
+  ) {
+    await openTrialFormInline(question);
+    return;
+  }
 
     const answer = answerMap[question] ?? {
       text: "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.",
     };
 
     await fakeBotReply(question, answer.text, answer.images || []);
-  };
+    };
 
   const handleSendCustomMessage = async () => {
     const value = chatInput.trim();
@@ -787,7 +856,8 @@ function QuestionGrid({
     >
       <div className="flex flex-wrap justify-start gap-x-2 gap-y-2">
         {items.map((item) => {
-  const isDemo = item === "Đăng ký sử dụng demo";
+const isDemo = item === "Đăng ký sử dụng demo";
+const isGuide = item === "Hướng dẫn sử dụng";
 
   return (
     <button
@@ -795,22 +865,32 @@ function QuestionGrid({
       type="button"
       onClick={() => onClick(item)}
       className={
-        isDemo
-          ? `
-            cursor-pointer whitespace-nowrap rounded-[14px]
-            border-2 border-[#38bdf8]   /* 👈 VIỀN ĐẬM */
-            bg-[linear-gradient(135deg,#eef8ff,#dff3ff)]
-            px-3 py-[7px] text-[11px] font-semibold leading-[16px]
-            text-[#0b63c9]
-            shadow-[0_4px_12px_rgba(14,116,255,0.15)]
-            transition hover:scale-[1.04] hover:border-[#0ea5e9] hover:shadow-[0_6px_16px_rgba(14,116,255,0.25)]
-          `
-          : `
-            cursor-pointer whitespace-nowrap rounded-[14px] border border-[#a8dbff] bg-white
-            px-3 py-[7px] text-[11px] font-medium leading-[16px] text-[#2e3137]
-            transition hover:scale-[1.02] hover:border-[#bfdcff] hover:bg-[#f6fbff]
-          `
-      }
+  isDemo
+    ? `
+      cursor-pointer whitespace-nowrap rounded-[14px]
+      border-2 border-[#38bdf8]
+      bg-[linear-gradient(135deg,#eef8ff,#dff3ff)]
+      px-3 py-[7px] text-[11px] font-semibold leading-[16px]
+      text-[#0b63c9]
+      shadow-[0_4px_12px_rgba(14,116,255,0.15)]
+      transition hover:scale-[1.04] hover:border-[#0ea5e9] hover:shadow-[0_6px_16px_rgba(14,116,255,0.25)]
+    `
+    : isGuide
+    ? `
+      cursor-pointer whitespace-nowrap rounded-[14px]
+      border-2 border-[#7c3aed]
+      bg-[linear-gradient(135deg,#f5f3ff,#ede9fe)]
+      px-3 py-[7px] text-[11px] font-semibold leading-[16px]
+      text-[#5b21b6]
+      shadow-[0_4px_12px_rgba(124,58,237,0.16)]
+      transition hover:scale-[1.04] hover:border-[#6d28d9] hover:shadow-[0_6px_16px_rgba(124,58,237,0.22)]
+    `
+    : `
+      cursor-pointer whitespace-nowrap rounded-[14px] border border-[#a8dbff] bg-white
+      px-3 py-[7px] text-[11px] font-medium leading-[16px] text-[#2e3137]
+      transition hover:scale-[1.02] hover:border-[#bfdcff] hover:bg-[#f6fbff]
+    `
+}
     >
       {item}
     </button>
