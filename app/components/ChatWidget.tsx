@@ -63,9 +63,16 @@ const INITIAL_SUGGESTIONS = Array.from(
   new Set([...quickQuestions, GUIDE_QUESTION, REGISTER_QUESTION])
 );
 
-export default function ChatWidget() {
+type ChatWidgetProps = {
+  mode?: "popup" | "page";
+};
+
+export default function ChatWidget({
+  mode = "popup",
+}: ChatWidgetProps) {
   const router = useRouter();
   const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("chat");
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(false);
@@ -80,35 +87,48 @@ export default function ChatWidget() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
 
-const welcomeMessage: Message = {
-  id: 1,
-  role: "bot",
-  text: "Xin chào 👋 Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm hiểu phần mềm, tính năng nổi bật và hướng dẫn đăng ký dùng thử demo.",
-};
-const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
+  const isPageMode = mode === "page";
 
+  const welcomeMessage: Message = {
+    id: 1,
+    role: "bot",
+    text: "Xin chào 👋 Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm hiểu phần mềm, tính năng nổi bật và hướng dẫn đăng ký dùng thử demo.",
+  };
+
+  const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping, step, suggestedQuestions]);
 
-  
-useEffect(() => {
-  // chỉ hiện ở trang chủ "/"
-  if (pathname !== "/") {
-    setShowWelcomeBubble(false);
-    return;
-  }
+  useEffect(() => {
+    if (pathname !== "/") {
+      setShowWelcomeBubble(false);
+      return;
+    }
 
-  setShowWelcomeBubble(true);
+    if (isPageMode) {
+      setShowWelcomeBubble(false);
+      return;
+    }
 
-  const timer = setTimeout(() => {
-    setShowWelcomeBubble(false);
-  }, 10000);
+    setShowWelcomeBubble(true);
 
-  return () => clearTimeout(timer);
-}, [pathname]);
+    const timer = setTimeout(() => {
+      setShowWelcomeBubble(false);
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, [pathname, isPageMode]);
+
+  useEffect(() => {
+    if (isPageMode) {
+      setOpen(true);
+      setShowWelcomeBubble(false);
+      setIsExpanded(true);
+    }
+  }, [isPageMode]);
 
   const getActiveSession = () => {
     const sessionKey = getOrCreateChatSessionId();
@@ -118,11 +138,18 @@ useEffect(() => {
   const goToRegisterDemo = () => {
     window.open(DEMO_REGISTER_URL, "_blank", "noopener,noreferrer");
   };
-const goToGuidePage = () => {
-  setOpen(false);
-  setShowWelcomeBubble(false);
-  router.push("/huong-dan-su-dung");
-};
+
+  const goToGuidePage = () => {
+    setOpen(false);
+    setShowWelcomeBubble(false);
+    router.push("/huong-dan-su-dung");
+  };
+
+  const goToFullChatPage = () => {
+    setOpen(false);
+    setShowWelcomeBubble(false);
+    router.push("/tro-ly-ai");
+  };
 
   const buildNextSuggestions = (question: string) => {
     const followUps = FOLLOW_UP_MAP[question];
@@ -416,76 +443,74 @@ const goToGuidePage = () => {
   };
 
   const handleQuickQuestion = async (question: string) => {
-  setShowSuggestions(false);
+    setShowSuggestions(false);
 
-if (question === GUIDE_QUESTION) {
-  const sessionKey = getOrCreateChatSessionId();
-  if (!sessionKey) return;
+    if (question === GUIDE_QUESTION) {
+      const sessionKey = getOrCreateChatSessionId();
+      if (!sessionKey) return;
 
-  const conversationId = await ensureConversationReady();
-  if (!conversationId) return;
+      const conversationId = await ensureConversationReady();
+      if (!conversationId) return;
 
-  const botText =
-    "Mình sẽ mở trang hướng dẫn sử dụng để bạn xem chi tiết nhé.";
+      const botText =
+        "Mình sẽ mở trang hướng dẫn sử dụng để bạn xem chi tiết nhé.";
 
-  await saveMessageToFirebase({
-    sessionId: conversationId,
-    name: "anonymous",
-    sessionKey,
-    role: "user",
-    message: question,
-  });
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "user",
+        message: question,
+      });
 
-  await saveMessageToFirebase({
-    sessionId: conversationId,
-    name: "anonymous",
-    sessionKey,
-    role: "bot",
-    message: botText,
-  });
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: botText,
+      });
 
-  maybePromoteConversationTitle(conversationId, question);
+      maybePromoteConversationTitle(conversationId, question);
 
-  setMessages((prev) => [
-    ...prev,
-    {
-      id: prev.length + 1,
-      role: "user",
-      text: question,
-    },
-    {
-      id: prev.length + 2,
-      role: "bot",
-      text: botText,
-    },
-  ]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: prev.length + 1,
+          role: "user",
+          text: question,
+        },
+        {
+          id: prev.length + 2,
+          role: "bot",
+          text: botText,
+        },
+      ]);
 
-  setStep("chat");
-  setSuggestedQuestions(INITIAL_SUGGESTIONS);
+      setStep("chat");
+      setSuggestedQuestions(INITIAL_SUGGESTIONS);
 
- 
+      setTimeout(() => {
+        goToGuidePage();
+      }, 200);
 
-  setTimeout(() => {
-    goToGuidePage();
-  }, 200);
+      return;
+    }
 
-  return;
-}
-
-  if (
-    question === "Làm sao để đăng ký dùng thử 15 ngày?" ||
-    question === REGISTER_QUESTION
-  ) {
-    await openTrialFormInline(question);
-    return;
-  }
+    if (
+      question === "Làm sao để đăng ký dùng thử 15 ngày?" ||
+      question === REGISTER_QUESTION
+    ) {
+      await openTrialFormInline(question);
+      return;
+    }
 
     const answer = answerMap[question] ?? {
       text: "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.",
     };
 
     await fakeBotReply(question, answer.text, answer.images || []);
-    };
+  };
 
   const handleSendCustomMessage = async () => {
     const value = chatInput.trim();
@@ -522,6 +547,7 @@ if (question === GUIDE_QUESTION) {
     setIsTyping(true);
 
     try {
+      // API chat trả về câu trả lời dựa trên AI
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -600,99 +626,122 @@ if (question === GUIDE_QUESTION) {
     }
   };
 
-if (!open) {
-  return (
-    <>
-      {showWelcomeBubble && (
-  <div className="fixed bottom-24 right-6 z-50">
-    <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-      {/* Mũi tên nhỏ */}
-      <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
+  if (!open && !isPageMode) {
+    return (
+      <>
+        {showWelcomeBubble && (
+          <div className="fixed bottom-24 right-6 z-50">
+            <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+              <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
 
-      <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
-      <div className="mt-1">
-        Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm hiểu
-        tính năng và đăng ký dùng thử demo.
-      </div>
+              <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
+              <div className="mt-1">
+                Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm
+                hiểu tính năng và đăng ký dùng thử demo.
+              </div>
 
-      <button
-        type="button"
-        onClick={() => setShowWelcomeBubble(false)}
-        className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
-      >
-        ×
-      </button>
-    </div>
-  </div>
-)}
+              <button
+                type="button"
+                onClick={() => setShowWelcomeBubble(false)}
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
-      <button
-        type="button"
-        onClick={() => {
-          setOpen(true);
-          setShowWelcomeBubble(false);
-        }}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
-      >
-        <img
-          src="/trangchu/chatbox.jpg"
-          alt="chat"
-          className="h-full w-full rounded-full object-cover"
-        />
-      </button>
-    </>
-  );
-}
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(true);
+            setShowWelcomeBubble(false);
+          }}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
+        >
+          <img
+            src="/trangchu/chatbox.jpg"
+            alt="chat"
+            className="h-full w-full rounded-full object-cover"
+          />
+        </button>
+      </>
+    );
+  }
 
   return (
     <>
       <div
-        className={`fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] transition-all duration-300 sm:bottom-5 sm:right-5 ${
-          isExpanded
-            ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
-            : "w-[390px] sm:w-[400px]"
+        className={`transition-all duration-300 ${
+          isPageMode
+            ? "relative w-full"
+            : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
+                isExpanded
+                  ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
+                  : "w-[390px] sm:w-[400px]"
+              }`
         }`}
       >
         <div className="chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]">
           <div className="relative z-10 flex items-center justify-between px-4 pb-3 pt-4">
-  <div className="flex items-center gap-2">
-    <img
-      src="/trangchu/chatbox.jpg"
-      alt="avatar"
-      className="h-8 w-8 rounded-full object-cover"
-    />
-    <img
-      src="/trangchu/logo.png"
-      alt="Nhanh Travel"
-      className="h-5 w-auto object-contain"
-    />
-  </div>
+            <div className="flex items-center gap-2">
+              <img
+                src="/trangchu/chatbox.jpg"
+                alt="avatar"
+                className="h-8 w-8 rounded-full object-cover"
+              />
+              <img
+                src="/trangchu/logo.png"
+                alt="Nhanh Travel"
+                className="h-5 w-auto object-contain"
+              />
+            </div>
 
-  <div className="flex items-center gap-2">
-    
-
-    <button
-      type="button"
-      onClick={() => setIsExpanded((prev) => !prev)}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-      title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
-    >
-      {isExpanded ? "⤡" : "⤢"}
-    </button>
-
-    <button
+            <div className="flex items-center gap-2">
+              {!isPageMode && (
+                <button
   type="button"
-  onClick={() => {
-    setOpen(false);
-    setShowWelcomeBubble(false);
-  }}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-      title="Đóng"
-    >
-      ×
-    </button>
-  </div>
-</div>
+  onClick={goToFullChatPage}
+  className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
+  title="Mở trang chat riêng"
+>
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+  </svg>
+</button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+                title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
+              >
+                {isExpanded ? "⤡" : "⤢"}
+              </button>
+
+              {!isPageMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setShowWelcomeBubble(false);
+                  }}
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+                  title="Đóng"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
 
           <div
             className={`relative z-10 overflow-hidden transition-all duration-300 ${
@@ -702,8 +751,6 @@ if (!open) {
             {step === "chat" && (
               <div className="flex h-full">
                 <div className="flex min-w-0 flex-1 flex-col">
-                  {!isExpanded && null}
-
                   <div className="chat-scrollbar flex-1 overflow-y-auto px-5 pb-3 pt-4">
                     <div className="space-y-3">
                       {messages.map((msg) => (
@@ -788,8 +835,6 @@ if (!open) {
                           className="mb-1"
                           isExpanded={isExpanded}
                         />
-
-                        
                       </div>
                     )}
                   </div>
@@ -826,7 +871,7 @@ if (!open) {
             </button>
 
             <img
-              src={previewImage}
+              src={previewImage ?? ""}
               alt="Xem ảnh lớn"
               className="max-h-[90vh] w-full rounded-[16px] object-contain"
             />
@@ -856,17 +901,17 @@ function QuestionGrid({
     >
       <div className="flex flex-wrap justify-start gap-x-2 gap-y-2">
         {items.map((item) => {
-const isDemo = item === "Đăng ký sử dụng demo";
-const isGuide = item === "Hướng dẫn sử dụng";
+          const isDemo = item === "Đăng ký sử dụng demo";
+          const isGuide = item === "Hướng dẫn sử dụng";
 
-  return (
-    <button
-      key={item}
-      type="button"
-      onClick={() => onClick(item)}
-      className={
-  isDemo
-    ? `
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onClick(item)}
+              className={
+                isDemo
+                  ? `
       cursor-pointer whitespace-nowrap rounded-[14px]
       border-2 border-[#38bdf8]
       bg-[linear-gradient(135deg,#eef8ff,#dff3ff)]
@@ -875,8 +920,8 @@ const isGuide = item === "Hướng dẫn sử dụng";
       shadow-[0_4px_12px_rgba(14,116,255,0.15)]
       transition hover:scale-[1.04] hover:border-[#0ea5e9] hover:shadow-[0_6px_16px_rgba(14,116,255,0.25)]
     `
-    : isGuide
-    ? `
+                  : isGuide
+                  ? `
       cursor-pointer whitespace-nowrap rounded-[14px]
       border-2 border-[#7c3aed]
       bg-[linear-gradient(135deg,#f5f3ff,#ede9fe)]
@@ -885,17 +930,17 @@ const isGuide = item === "Hướng dẫn sử dụng";
       shadow-[0_4px_12px_rgba(124,58,237,0.16)]
       transition hover:scale-[1.04] hover:border-[#6d28d9] hover:shadow-[0_6px_16px_rgba(124,58,237,0.22)]
     `
-    : `
+                  : `
       cursor-pointer whitespace-nowrap rounded-[14px] border border-[#a8dbff] bg-white
       px-3 py-[7px] text-[11px] font-medium leading-[16px] text-[#2e3137]
       transition hover:scale-[1.02] hover:border-[#bfdcff] hover:bg-[#f6fbff]
     `
-}
-    >
-      {item}
-    </button>
-  );
-})}
+              }
+            >
+              {item}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

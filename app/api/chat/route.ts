@@ -77,6 +77,7 @@ function extractJsonObject(text: string) {
   }
 }
 
+// Định nghĩa kiểu dữ liệu cho câu trả lời của AI
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -190,6 +191,7 @@ ${message}
 `.trim();
 
     try {
+      // Gọi OpenAI API để lấy câu trả lời dựa trên prompt đã tạo
       const response = await client.chat.completions.create({
         model: "gpt-4o-mini",
         temperature: 0.3,
