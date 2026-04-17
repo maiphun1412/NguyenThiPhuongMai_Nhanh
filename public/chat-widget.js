@@ -321,19 +321,28 @@ style.innerHTML = `
   var isOpen = false;
 
   function openWidget() {
-    isOpen = true;
-    popup.style.display = "block";
-    teaser.style.display = "none";
-    if (window.innerWidth > 768) {
-      overlay.style.display = "block";
-    }
+  isOpen = true;
+
+  popup.style.display = "block";
+  teaser.style.display = "none";
+
+  // 👇 Ẩn icon khi mở
+  button.style.display = "none";
+
+  if (window.innerWidth > 768) {
+    overlay.style.display = "block";
   }
+}
 
   function closeWidget() {
-    isOpen = false;
-    popup.style.display = "none";
-    overlay.style.display = "none";
-  }
+  isOpen = false;
+
+  popup.style.display = "none";
+  overlay.style.display = "none";
+
+  // 👇 Hiện lại icon
+  button.style.display = "flex";
+}
 
   function toggleWidget() {
     if (isOpen) {
