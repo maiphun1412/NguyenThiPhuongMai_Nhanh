@@ -59,6 +59,10 @@
       cursor: pointer;
       z-index: ${zIndex + 3};
       overflow: visible;
+
+      /* hiệu ứng zoom in / zoom out */
+      animation: nhanhPulse 2.2s infinite ease-in-out;
+      transition: transform 0.2s ease;
     }
 
     #nhanh-chat-widget-button img {
@@ -67,10 +71,29 @@
       display: block;
       object-fit: contain;
       border-radius: 999px;
+
+      /* viền + glow */
+      border: 2px solid #3b82f6;
+      box-shadow:
+        0 0 0 4px rgba(59, 130, 246, 0.14),
+        0 10px 22px rgba(59, 130, 246, 0.22);
+      background: #ffffff;
     }
 
     #nhanh-chat-widget-button:hover {
-      transform: translateY(-1px);
+      transform: scale(1.1);
+    }
+
+    @keyframes nhanhPulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.07);
+      }
+      100% {
+        transform: scale(1);
+      }
     }
 
     #nhanh-chat-widget-teaser {
