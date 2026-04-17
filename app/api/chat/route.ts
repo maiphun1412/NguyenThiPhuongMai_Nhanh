@@ -12,6 +12,15 @@ const client = new OpenAI({
   apiKey,
 });
 
+type ChatAction = "reply_only" | "open_trial_form";
+type ChatSource =
+  | "system"
+  | "rule"
+  | "faq"
+  | "ai"
+  | "ai-fallback"
+  | "faq-fallback";
+
 function normalizeText(text: string) {
   return text
     .toLowerCase()
@@ -77,21 +86,30 @@ function extractJsonObject(text: string) {
   }
 }
 
-// Định nghĩa kiểu dữ liệu cho câu trả lời của AI
+function jsonResponse(
+  text: string,
+  source: ChatSource,
+  action: ChatAction,
+  status = 200
+) {
+  return NextResponse.json(
+    {
+      answer: text,
+      reply: text,
+      source,
+      action,
+    },
+    { status }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const message = String(body?.message || "").trim();
 
     if (!message) {
-      return NextResponse.json(
-        {
-          answer: "Vui lòng nhập câu hỏi.",
-          source: "system",
-          action: "reply_only",
-        },
-        { status: 400 }
-      );
+      return jsonResponse("Vui lòng nhập câu hỏi.", "system", "reply_only", 400);
     }
 
     const normalized = normalizeText(message);
@@ -129,22 +147,17 @@ export async function POST(req: NextRequest) {
     );
 
     if (shouldOpenTrialForm) {
-      return NextResponse.json({
-        answer:
-          "Vui lòng điền những thông tin dưới đây để đội ngũ hỗ trợ liên hệ và kích hoạt dùng thử.",
-        source: "rule",
-        action: "open_trial_form",
-      });
+      return jsonResponse(
+        "Vui lòng điền những thông tin dưới đây để đội ngũ hỗ trợ liên hệ và kích hoạt dùng thử.",
+        "rule",
+        "open_trial_form"
+      );
     }
 
     const { bestMatch, bestScore } = findBestFaq(message);
 
     if (bestMatch && bestScore >= 4) {
-      return NextResponse.json({
-        answer: bestMatch.answer,
-        source: "faq",
-        action: "reply_only",
-      });
+      return jsonResponse(bestMatch.answer, "faq", "reply_only");
     }
 
     const faqContext = faqData
@@ -154,13 +167,13 @@ export async function POST(req: NextRequest) {
       )
       .join("\n\n");
 
-const prompt = `
+    const prompt = `
 Bạn là trợ lý tư vấn cho website Nhanh Travel.
 
 Yêu cầu bắt buộc:
 - Sử dụng thêm các thông tin đã được cung cấp trong hệ thống hoặc dữ liệu nội bộ
 - Trả lời bằng tiếng Việt.
-- Chỉ trả lười các câu trả lời liên quan đến sản phẩm, dịch vụ, chính sách, quy trình của Nhanh Travel. Không trả lời ngoài phạm vi này.
+- Chỉ trả lời các câu hỏi liên quan đến sản phẩm, dịch vụ, chính sách, quy trình của Nhanh Travel. Không trả lời ngoài phạm vi này.
 - Giọng văn thân thiện, tự nhiên, lễ phép.
 - Không trả lời cộc lốc, không trả lời quá ngắn.
 - Mỗi câu trả lời nên từ 3 đến 6 câu nếu là câu hỏi thông tin.
@@ -191,7 +204,6 @@ ${message}
 `.trim();
 
     try {
-      // Gọi OpenAI API để lấy câu trả lời dựa trên prompt đã tạo
       const response = await client.chat.completions.create({
         model: "gpt-4o-mini",
         temperature: 0.3,
@@ -215,53 +227,45 @@ ${message}
       const parsed = extractJsonObject(rawText);
 
       if (!parsed || typeof parsed !== "object") {
-        return NextResponse.json({
-          answer:
-            "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.",
-          source: "ai-fallback",
-          action: "reply_only",
-        });
+        return jsonResponse(
+          "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.",
+          "ai-fallback",
+          "reply_only"
+        );
       }
 
-      return NextResponse.json({
-        answer:
-          typeof parsed.answer === "string" && parsed.answer.trim()
-            ? parsed.answer.trim()
-            : "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.",
-        source: "ai",
-        action:
-          parsed.action === "open_trial_form"
-            ? "open_trial_form"
-            : "reply_only",
-      });
+      const finalAnswer =
+        typeof parsed.answer === "string" && parsed.answer.trim()
+          ? parsed.answer.trim()
+          : "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.";
+
+      const finalAction: ChatAction =
+        parsed.action === "open_trial_form"
+          ? "open_trial_form"
+          : "reply_only";
+
+      return jsonResponse(finalAnswer, "ai", finalAction);
     } catch (error) {
       console.error("Lỗi OpenAI:", error);
 
       if (bestMatch) {
-        return NextResponse.json({
-          answer: bestMatch.answer,
-          source: "faq-fallback",
-          action: "reply_only",
-        });
+        return jsonResponse(bestMatch.answer, "faq-fallback", "reply_only");
       }
 
-      return NextResponse.json({
-        answer:
-          "Hiện tại hệ thống AI đang bận. Anh/chị vui lòng để lại thông tin bên dưới, đội ngũ Nhanh Travel sẽ liên hệ hỗ trợ sớm ạ.",
-        source: "system",
-        action: "open_trial_form",
-      });
+      return jsonResponse(
+        "Hiện tại hệ thống AI đang bận. Anh/chị vui lòng để lại thông tin bên dưới, đội ngũ Nhanh Travel sẽ liên hệ hỗ trợ sớm ạ.",
+        "system",
+        "open_trial_form"
+      );
     }
   } catch (error) {
     console.error("Lỗi API /api/chat:", error);
 
-    return NextResponse.json(
-      {
-        answer: "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.",
-        source: "system",
-        action: "reply_only",
-      },
-      { status: 500 }
+    return jsonResponse(
+      "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.",
+      "system",
+      "reply_only",
+      500
     );
   }
 }

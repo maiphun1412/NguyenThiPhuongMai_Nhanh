@@ -64,7 +64,7 @@ const INITIAL_SUGGESTIONS = Array.from(
 );
 
 type ChatWidgetProps = {
-  mode?: "popup" | "page";
+  mode?: "popup" | "page" | "embed";
 };
 
 export default function ChatWidget({
@@ -83,11 +83,21 @@ export default function ChatWidget({
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] =
     useState<string[]>(INITIAL_SUGGESTIONS);
+    const closeEmbedWidget = () => {
+  setOpen(false);
+  setShowWelcomeBubble(false);
+
+  // Nếu đang chạy trong iframe (widget)
+  if (typeof window !== "undefined" && window.parent !== window) {
+    window.parent.postMessage({ type: "NHANH_CHAT_CLOSE" }, "*");
+  }
+};
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
 
   const isPageMode = mode === "page";
+  const isEmbedMode = mode === "embed";
 
   const welcomeMessage: Message = {
     id: 1,
@@ -123,12 +133,11 @@ export default function ChatWidget({
   }, [pathname, isPageMode]);
 
   useEffect(() => {
-    if (isPageMode) {
-      setOpen(true);
-      setShowWelcomeBubble(false);
-      setIsExpanded(true);
-    }
-  }, [isPageMode]);
+  if (isEmbedMode) {
+    setOpen(true);
+    setShowWelcomeBubble(false);
+  }
+}, [isEmbedMode]);
 
   const getActiveSession = () => {
     const sessionKey = getOrCreateChatSessionId();
@@ -139,17 +148,29 @@ export default function ChatWidget({
     window.open(DEMO_REGISTER_URL, "_blank", "noopener,noreferrer");
   };
 
-  const goToGuidePage = () => {
-    setOpen(false);
-    setShowWelcomeBubble(false);
-    router.push("/huong-dan-su-dung");
-  };
+const goToGuidePage = () => {
+  setShowWelcomeBubble(false);
 
-  const goToFullChatPage = () => {
-    setOpen(false);
-    setShowWelcomeBubble(false);
-    router.push("/tro-ly-ai");
-  };
+  if (typeof window !== "undefined" && window.parent !== window) {
+    window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  setOpen(false);
+  window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
+};
+
+const goToFullChatPage = () => {
+  setShowWelcomeBubble(false);
+
+  if (typeof window !== "undefined" && window.parent !== window) {
+    window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  setOpen(false);
+  window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
+};
 
   const buildNextSuggestions = (question: string) => {
     const followUps = FOLLOW_UP_MAP[question];
@@ -626,128 +647,133 @@ export default function ChatWidget({
     }
   };
 
-  if (!open && !isPageMode) {
-    return (
-      <>
-        {showWelcomeBubble && (
-          <div className="fixed bottom-24 right-6 z-50">
-            <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-              <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
+if (!open && !isPageMode) {
+  if (isEmbedMode) return null;
 
-              <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
-              <div className="mt-1">
-                Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm
-                hiểu tính năng và đăng ký dùng thử demo.
-              </div>
+  return (
+    <>
+      {showWelcomeBubble && (
+        <div className="fixed bottom-24 right-6 z-50">
+          <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+            <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
 
-              <button
-                type="button"
-                onClick={() => setShowWelcomeBubble(false)}
-                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
-              >
-                ×
-              </button>
+            <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
+            <div className="mt-1">
+              Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm
+              hiểu tính năng và đăng ký dùng thử demo.
             </div>
-          </div>
-        )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(true);
-            setShowWelcomeBubble(false);
-          }}
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
-        >
-          <img
-            src="/trangchu/chatbox.jpg"
-            alt="chat"
-            className="h-full w-full rounded-full object-cover"
-          />
-        </button>
-      </>
-    );
-  }
+            <button
+              type="button"
+              onClick={() => setShowWelcomeBubble(false)}
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          setShowWelcomeBubble(false);
+        }}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
+      >
+        <img
+          src="/trangchu/chatbox.jpg"
+          alt="chat"
+          className="h-full w-full rounded-full object-cover"
+        />
+      </button>
+    </>
+  );
+}
 
   return (
     <>
       <div
-        className={`transition-all duration-300 ${
-          isPageMode
-            ? "relative w-full"
-            : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
-                isExpanded
-                  ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
-                  : "w-[390px] sm:w-[400px]"
-              }`
-        }`}
-      >
-        <div className="chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]">
-          <div className="relative z-10 flex items-center justify-between px-4 pb-3 pt-4">
-            <div className="flex items-center gap-2">
-              <img
-                src="/trangchu/chatbox.jpg"
-                alt="avatar"
-                className="h-8 w-8 rounded-full object-cover"
-              />
-              <img
-                src="/trangchu/logo.png"
-                alt="Nhanh Travel"
-                className="h-5 w-auto object-contain"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              {!isPageMode && (
-                <button
-  type="button"
-  onClick={goToFullChatPage}
-  className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
-  title="Mở trang chat riêng"
+  className={`transition-all duration-300 ${
+    isPageMode || isEmbedMode
+      ? "relative h-full w-full"
+      : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
+          isExpanded
+            ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
+            : "w-[390px] sm:w-[400px]"
+        }`
+  }`}
 >
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-  </svg>
-</button>
-              )}
+        <div
+  className={
+    isEmbedMode
+      ? "flex h-full w-full flex-col bg-white"
+      : "chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]"
+  }
+>
+         <div className="relative z-10 flex items-center justify-between px-4 pb-3 pt-4">
+  <div className="flex items-center gap-2">
+    <img
+      src="/trangchu/chatbox.jpg"
+      alt="avatar"
+      className="h-8 w-8 rounded-full object-cover"
+    />
+    <img
+      src="/trangchu/logo.png"
+      alt="Nhanh Travel"
+      className="h-5 w-auto object-contain"
+    />
+  </div>
 
-              <button
-                type="button"
-                onClick={() => setIsExpanded((prev) => !prev)}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-                title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
-              >
-                {isExpanded ? "⤡" : "⤢"}
-              </button>
+  <div className="flex items-center gap-2">
+    {!isPageMode && (
+      <button
+        type="button"
+        onClick={goToFullChatPage}
+        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
+        title="Mở trang chat riêng"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+        </svg>
+      </button>
+    )}
 
-              {!isPageMode && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setShowWelcomeBubble(false);
-                  }}
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-                  title="Đóng"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
+    <button
+      type="button"
+      onClick={() => setIsExpanded((prev) => !prev)}
+      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+      title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
+    >
+      {isExpanded ? "⤡" : "⤢"}
+    </button>
+
+    {!isPageMode && (
+      <button
+        type="button"
+        onClick={closeEmbedWidget}
+        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+        title="Đóng"
+      >
+        ×
+      </button>
+    )}
+  </div>
+</div>
 
           <div
-            className={`relative z-10 overflow-hidden transition-all duration-300 ${
-              isExpanded ? "h-[78vh]" : "h-[610px]"
-            }`}
-          >
+  className={`relative z-10 overflow-hidden transition-all duration-300 ${
+    isEmbedMode ? "h-full" : isExpanded ? "h-[78vh]" : "h-[610px]"
+  }`}
+>
             {step === "chat" && (
               <div className="flex h-full">
                 <div className="flex min-w-0 flex-1 flex-col">
