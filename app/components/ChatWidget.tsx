@@ -726,47 +726,49 @@ if (!open && !isPageMode) {
     />
   </div>
 
-  <div className="flex items-center gap-2">
-    {!isPageMode && (
-      <button
-        type="button"
-        onClick={goToFullChatPage}
-        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
-        title="Mở trang chat riêng"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-        </svg>
-      </button>
-    )}
-
+<div className="flex items-center gap-2">
+  {!isPageMode && (
     <button
       type="button"
-      onClick={() => setIsExpanded((prev) => !prev)}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-      title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
+      onClick={goToFullChatPage}
+      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
+      title="Mở trang chat riêng"
     >
-      {isExpanded ? "⤡" : "⤢"}
-    </button>
-
-    {!isPageMode && (
-      <button
-        type="button"
-        onClick={closeEmbedWidget}
-        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-        title="Đóng"
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
       >
-        ×
-      </button>
-    )}
-  </div>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+      </svg>
+    </button>
+  )}
+
+  {!isPageMode && !isExpanded && (
+    <button
+      type="button"
+      onClick={() => setIsExpanded(true)}
+      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+      title="Mở rộng"
+    >
+      ⤢
+    </button>
+  )}
+
+  {!isPageMode && (
+    <button
+      type="button"
+      onClick={closeEmbedWidget}
+      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+      title="Đóng"
+    >
+      ×
+    </button>
+  )}
+</div>
 </div>
 
           <div
@@ -920,11 +922,9 @@ function QuestionGrid({
   isExpanded?: boolean;
 }) {
   return (
-    <div
-      className={`mx-auto w-full ${
-        isExpanded ? "max-w-none px-1" : "max-w-[366px]"
-      } ${className}`}
-    >
+   <div
+  className={`mx-auto w-full max-w-full px-1 ${className}`}
+>
       <div className="flex flex-wrap justify-start gap-x-2 gap-y-2">
         {items.map((item) => {
           const isDemo = item === "Đăng ký sử dụng demo";
