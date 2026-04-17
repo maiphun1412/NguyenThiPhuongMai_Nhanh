@@ -18,13 +18,7 @@ export default function TroLyAiPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="rounded-lg border border-[#d8dee8] bg-white px-4 py-2 text-[13px] font-medium text-[#4b5563] transition hover:bg-[#f8fbff]"
-        >
-          Quay lại
-        </button>
+        
       </header>
 
       <div className="mx-auto max-w-[1200px] px-4 py-6 md:px-6">
