@@ -18,12 +18,12 @@
   );
 
   var popupWidth = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-width")) || "460",
+    (scriptTag && scriptTag.getAttribute("data-width")) || "380",
     10
   );
 
   var popupHeight = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-height")) || "820",
+    (scriptTag && scriptTag.getAttribute("data-height")) || "610",
     10
   );
 
@@ -327,12 +327,49 @@
     }
   });
 
-  // Thêm đoạn này để iframe có thể gửi lệnh đóng popup ra ngoài
-  window.addEventListener("message", function (event) {
-    if (event.data && event.data.type === "NHANH_CHAT_CLOSE") {
-      closeWidget();
+  var defaultPopupWidth = popupWidth;
+var defaultPopupHeight = popupHeight;
+var isExpandedWidget = false;
+
+function expandWidget() {
+  isExpandedWidget = true;
+
+  var expandedWidth = Math.min(window.innerWidth * 0.92, 980);
+  var expandedHeight = Math.max(window.innerHeight * 0.78, 640);
+
+  popup.style.width = expandedWidth + "px";
+  popup.style.height = expandedHeight + "px";
+  popup.style.maxWidth = "calc(100vw - 24px)";
+  popup.style.maxHeight = "calc(100vh - 24px)";
+}
+
+function collapseWidget() {
+  isExpandedWidget = false;
+
+  popup.style.width = defaultPopupWidth + "px";
+  popup.style.height = defaultPopupHeight + "px";
+  popup.style.maxWidth = "calc(100vw - 24px)";
+  popup.style.maxHeight = "calc(100vh - 24px)";
+}
+
+window.addEventListener("message", function (event) {
+  if (!event.data) return;
+
+  console.log("Nhanh widget message:", event.data);
+
+  if (event.data.type === "NHANH_CHAT_CLOSE") {
+    closeWidget();
+    return;
+  }
+
+  if (event.data.type === "NHANH_CHAT_EXPAND") {
+    if (isExpandedWidget) {
+      collapseWidget();
+    } else {
+      expandWidget();
     }
-  });
+  }
+});
 
   window.NhanhChatWidget = {
     open: openWidget,

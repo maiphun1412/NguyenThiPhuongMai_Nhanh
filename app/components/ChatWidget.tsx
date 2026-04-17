@@ -747,16 +747,23 @@ if (!open && !isPageMode) {
     </button>
   )}
 
-  {!isPageMode && !isExpanded && (
-    <button
-      type="button"
-      onClick={() => setIsExpanded(true)}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-      title="Mở rộng"
-    >
-      ⤢
-    </button>
-  )}
+ {!isPageMode && (
+  <button
+    type="button"
+    onClick={() => {
+      if (typeof window !== "undefined" && window.parent !== window) {
+        window.parent.postMessage({ type: "NHANH_CHAT_EXPAND" }, "*");
+        return;
+      }
+
+      setIsExpanded((prev) => !prev);
+    }}
+    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+    title="Mở rộng"
+  >
+    ⤢
+  </button>
+)}
 
   {!isPageMode && (
     <button
