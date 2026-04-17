@@ -6,11 +6,7 @@ import ChatWidget from "./ChatWidget";
 export default function ConditionalChatWidget() {
   const pathname = usePathname();
 
-  const hiddenPaths = ["/chat-embed"];
-
-  const shouldHideChatWidget = hiddenPaths.includes(pathname);
-
-  if (shouldHideChatWidget) {
+  if (pathname === "/tro-ly-ai" || pathname === "/chat-embed") {
     return null;
   }
 

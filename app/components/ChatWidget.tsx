@@ -730,7 +730,12 @@ if (!open && !isPageMode) {
   {!isPageMode && (
     <button
       type="button"
-      onClick={goToFullChatPage}
+      onClick={() => {
+  if (typeof window !== "undefined" && window.parent !== window) {
+    window.parent.postMessage({ type: "NHANH_CHAT_HIDE_LAUNCHER" }, "*");
+  }
+  goToFullChatPage();
+}}
       className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
       title="Mở trang chat riêng"
     >
@@ -746,6 +751,7 @@ if (!open && !isPageMode) {
       </svg>
     </button>
   )}
+
 
  {!isPageMode && (
   <button

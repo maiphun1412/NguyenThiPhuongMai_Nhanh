@@ -88,6 +88,13 @@ style.innerHTML = `
     animation-play-state: paused;
     transform: scale(1.06);
   }
+      #nhanh-chat-widget-button.is-hidden {
+    display: none !important;
+  }
+
+  #nhanh-chat-widget-teaser.is-hidden {
+    display: none !important;
+  }
 
   @keyframes nhanhChatPulse {
     0% {
@@ -319,29 +326,34 @@ style.innerHTML = `
 
   var teaserCloseBtn = document.getElementById("nhanh-chat-widget-teaser-close");
   var isOpen = false;
+    function hideLauncher() {
+  teaser.classList.add("is-hidden");
+}
 
-  function openWidget() {
+function showLauncher() {
+  button.classList.remove("is-hidden");
+  if (!isOpen) {
+    teaser.classList.remove("is-hidden");
+  }
+}
+
+    function openWidget() {
   isOpen = true;
-
   popup.style.display = "block";
   teaser.style.display = "none";
 
-  // 👇 Ẩn icon khi mở
-  button.style.display = "none";
+  // vẫn giữ icon ở góc phải khi mở bản thu nhỏ
+  button.classList.remove("is-hidden");
 
   if (window.innerWidth > 768) {
     overlay.style.display = "block";
   }
 }
-
-  function closeWidget() {
+    function closeWidget() {
   isOpen = false;
-
   popup.style.display = "none";
   overlay.style.display = "none";
-
-  // 👇 Hiện lại icon
-  button.style.display = "flex";
+  showLauncher();
 }
 
   function toggleWidget() {
@@ -371,13 +383,40 @@ style.innerHTML = `
     openWidget();
   });
 
-  window.addEventListener("message", function (event) {
-    if (!event || !event.data) return;
+    window.addEventListener("message", function (event) {
+  if (!event || !event.data) return;
 
-    if (event.data.type === "NHANH_CHAT_CLOSE") {
-      closeWidget();
-    }
-  });
+  if (event.data.type === "NHANH_CHAT_CLOSE") {
+    closeWidget();
+    return;
+  }
+
+  if (event.data.type === "NHANH_CHAT_EXPAND") {
+  isOpen = true;
+
+  // phóng to toàn màn hình thì ẩn cả teaser + icon
+  teaser.classList.add("is-hidden");
+  button.classList.add("is-hidden");
+
+  teaser.style.display = "none";
+  overlay.style.display = "none";
+  popup.style.display = "block";
+  popup.style.right = "0";
+  popup.style.bottom = "0";
+  popup.style.width = "100vw";
+  popup.style.height = "100vh";
+  popup.style.maxWidth = "100vw";
+  popup.style.maxHeight = "100vh";
+  popup.style.borderRadius = "0";
+  return;
+}
+
+  // ✅ THÊM ĐOẠN NÀY
+  if (event.data.type === "NHANH_CHAT_HIDE_LAUNCHER") {
+    hideLauncher();
+    return;
+  }
+});
 
   window.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && isOpen) {
