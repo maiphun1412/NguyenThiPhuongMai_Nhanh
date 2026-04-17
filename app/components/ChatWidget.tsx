@@ -858,11 +858,10 @@ if (!open && !isPageMode) {
                     {showSuggestions && (
                       <div className="space-y-2">
                         <QuestionGrid
-                          items={suggestedQuestions}
-                          onClick={handleQuickQuestion}
-                          className="mb-1"
-                          isExpanded={isExpanded}
-                        />
+  items={suggestedQuestions}
+  onClick={handleQuickQuestion}
+  className="mb-1"
+/>
                       </div>
                     )}
                   </div>
@@ -914,18 +913,14 @@ function QuestionGrid({
   items,
   onClick,
   className = "",
-  isExpanded = false,
 }: {
   items: string[];
   onClick: (item: string) => void | Promise<void>;
   className?: string;
-  isExpanded?: boolean;
 }) {
   return (
-   <div
-  className={`mx-auto w-full max-w-full px-1 ${className}`}
->
-      <div className="flex flex-wrap justify-start gap-x-2 gap-y-2">
+    <div className={`w-full px-1 ${className}`}>
+      <div className="flex w-full flex-wrap justify-start gap-2">
         {items.map((item) => {
           const isDemo = item === "Đăng ký sử dụng demo";
           const isGuide = item === "Hướng dẫn sử dụng";
