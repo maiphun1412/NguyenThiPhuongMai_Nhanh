@@ -791,8 +791,8 @@ if (!open && !isPageMode) {
 >
             {step === "chat" && (
               <div className="flex h-full">
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="chat-scrollbar flex-1 overflow-y-auto px-5 pb-0 pt-4">
+                <div className="flex min-w-0 flex-1 flex-col w-full">
+                  <div className="chat-scrollbar flex-1 overflow-y-auto px-2 pb-0 pt-4">
                     <div className="space-y-3">
                       {messages.map((msg) => (
                         <div

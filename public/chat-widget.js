@@ -21,7 +21,7 @@
   );
 
   var popupWidth = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-width")) || "400",
+    (scriptTag && scriptTag.getAttribute("data-width")) || "420",
     10
   );
 
