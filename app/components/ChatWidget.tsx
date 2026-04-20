@@ -83,14 +83,15 @@ export default function ChatWidget({
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] =
     useState<string[]>(INITIAL_SUGGESTIONS);
-    const closeEmbedWidget = () => {
-  setOpen(false);
+const closeEmbedWidget = () => {
   setShowWelcomeBubble(false);
 
-  // Nếu đang chạy trong iframe (widget)
   if (typeof window !== "undefined" && window.parent !== window) {
     window.parent.postMessage({ type: "NHANH_CHAT_CLOSE" }, "*");
+    return;
   }
+
+  setOpen(false);
 };
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
