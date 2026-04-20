@@ -21,7 +21,7 @@
   );
 
   var popupWidth = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-width")) || "420",
+    (scriptTag && scriptTag.getAttribute("data-width")) || "480",
     10
   );
 
@@ -350,7 +350,7 @@ function applyExpandedSize() {
   popup.style.display = "block";
   popup.style.right = rightOffset + "px";
   popup.style.bottom = (bottomOffset + buttonSize + 14) + "px";
-  popup.style.width = "800px";
+  popup.style.width = "850px";
   popup.style.height = "83vh";
   popup.style.maxWidth = "calc(100vw - 24px)";
   popup.style.maxHeight = "calc(100vh - 24px)";
