@@ -350,8 +350,8 @@ function applyExpandedSize() {
   popup.style.display = "block";
   popup.style.right = rightOffset + "px";
   popup.style.bottom = (bottomOffset + buttonSize + 14) + "px";
-  popup.style.width = "760px";
-  popup.style.height = "78vh";
+  popup.style.width = "800px";
+  popup.style.height = "83vh";
   popup.style.maxWidth = "calc(100vw - 24px)";
   popup.style.maxHeight = "calc(100vh - 24px)";
   popup.style.borderRadius = "22px";
