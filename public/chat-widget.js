@@ -26,7 +26,7 @@
   );
 
   var popupHeight = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-height")) || "620",
+    (scriptTag && scriptTag.getAttribute("data-height")) || "600",
     10
   );
 
