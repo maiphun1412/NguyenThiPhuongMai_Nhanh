@@ -318,7 +318,7 @@
     popup.style.right = rightOffset + "px";
     popup.style.bottom = bottomOffset + buttonSize + 14 + "px";
     popup.style.width = "1000px";
-    popup.style.height = "87vh";
+    popup.style.height = "85vh";
     popup.style.maxWidth = "calc(100vw - 24px)";
     popup.style.maxHeight = "calc(100vh - 24px)";
     popup.style.borderRadius = "22px";
