@@ -16,17 +16,17 @@
     (scriptTag && scriptTag.getAttribute("data-button-text")) || "";
 
   var buttonSize = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-button-size")) || "68",
+    (scriptTag && scriptTag.getAttribute("data-button-size")) || "58",
     10
   );
 
   var popupWidth = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-width")) || "360",
+    (scriptTag && scriptTag.getAttribute("data-width")) || "400",
     10
   );
 
   var popupHeight = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-height")) || "600",
+    (scriptTag && scriptTag.getAttribute("data-height")) || "610",
     10
   );
 
@@ -278,18 +278,14 @@ style.innerHTML = `
   var topbar = document.createElement("div");
   topbar.id = "nhanh-chat-widget-topbar";
 
-  var closeBtn = document.createElement("button");
-  closeBtn.id = "nhanh-chat-widget-close";
-  closeBtn.type = "button";
-  closeBtn.setAttribute("aria-label", "Đóng chat");
-  closeBtn.innerHTML = "×";
+ 
 
   var iframe = document.createElement("iframe");
   iframe.id = "nhanh-chat-widget-iframe";
   iframe.src = iframeUrl;
   iframe.title = "Nhanh Travel AI Chat";
 
-  topbar.appendChild(closeBtn);
+
   popup.appendChild(topbar);
   popup.appendChild(iframe);
 
@@ -324,8 +320,9 @@ style.innerHTML = `
   document.body.appendChild(teaser);
   document.body.appendChild(button);
 
-  var teaserCloseBtn = document.getElementById("nhanh-chat-widget-teaser-close");
-  var isOpen = false;
+ var teaserCloseBtn = document.getElementById("nhanh-chat-widget-teaser-close");
+var isOpen = false;
+var isExpanded = false;
     function hideLauncher() {
   teaser.classList.add("is-hidden");
 }
@@ -336,13 +333,40 @@ function showLauncher() {
     teaser.classList.remove("is-hidden");
   }
 }
-
-    function openWidget() {
-  isOpen = true;
+function applyNormalSize() {
+  isExpanded = false;
   popup.style.display = "block";
+  popup.style.right = rightOffset + "px";
+  popup.style.bottom = (bottomOffset + buttonSize + 14) + "px";
+  popup.style.width = popupWidth + "px";
+  popup.style.height = popupHeight + "px";
+  popup.style.maxWidth = "calc(100vw - 24px)";
+  popup.style.maxHeight = "calc(100vh - 24px)";
+  popup.style.borderRadius = "22px";
+}
+
+function applyExpandedSize() {
+  isExpanded = true;
+  popup.style.display = "block";
+  popup.style.right = rightOffset + "px";
+  popup.style.bottom = (bottomOffset + buttonSize + 14) + "px";
+  popup.style.width = "760px";
+  popup.style.height = "78vh";
+  popup.style.maxWidth = "calc(100vw - 24px)";
+  popup.style.maxHeight = "calc(100vh - 24px)";
+  popup.style.borderRadius = "22px";
+}
+
+function openWidget() {
+  isOpen = true;
   teaser.style.display = "none";
 
-  // vẫn giữ icon ở góc phải khi mở bản thu nhỏ
+  if (isExpanded) {
+    applyExpandedSize();
+  } else {
+    applyNormalSize();
+  }
+
   button.classList.remove("is-hidden");
 
   if (window.innerWidth > 768) {
@@ -351,8 +375,10 @@ function showLauncher() {
 }
     function closeWidget() {
   isOpen = false;
+  isExpanded = false;
   popup.style.display = "none";
   overlay.style.display = "none";
+  applyNormalSize();
   showLauncher();
 }
 
@@ -369,7 +395,7 @@ function showLauncher() {
   }
 
   button.addEventListener("click", toggleWidget);
-  closeBtn.addEventListener("click", closeWidget);
+
   overlay.addEventListener("click", closeWidget);
 
   if (teaserCloseBtn) {
@@ -393,21 +419,20 @@ function showLauncher() {
 
   if (event.data.type === "NHANH_CHAT_EXPAND") {
   isOpen = true;
-
-  // phóng to toàn màn hình thì ẩn cả teaser + icon
-  teaser.classList.add("is-hidden");
-  button.classList.add("is-hidden");
-
   teaser.style.display = "none";
-  overlay.style.display = "none";
-  popup.style.display = "block";
-  popup.style.right = "0";
-  popup.style.bottom = "0";
-  popup.style.width = "100vw";
-  popup.style.height = "100vh";
-  popup.style.maxWidth = "100vw";
-  popup.style.maxHeight = "100vh";
-  popup.style.borderRadius = "0";
+
+  if (isExpanded) {
+    applyNormalSize();
+  } else {
+    applyExpandedSize();
+  }
+
+  button.classList.remove("is-hidden");
+
+  if (window.innerWidth > 768) {
+    overlay.style.display = "block";
+  }
+
   return;
 }
 

@@ -699,10 +699,10 @@ if (!open && !isPageMode) {
     isPageMode || isEmbedMode
       ? "relative h-full w-full"
       : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
-          isExpanded
-            ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
-            : "w-[390px] sm:w-[400px]"
-        }`
+  isExpanded
+    ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
+    : "w-[420px] sm:w-[440px]"
+}`
   }`}
 >
         <div
@@ -712,7 +712,7 @@ if (!open && !isPageMode) {
       : "chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]"
   }
 >
-         <div className="relative z-10 flex items-center justify-between px-4 pb-3 pt-4">
+        <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
   <div className="flex items-center gap-2">
     <img
       src="/trangchu/chatbox.jpg"
@@ -785,14 +785,14 @@ if (!open && !isPageMode) {
 </div>
 
           <div
-  className={`relative z-10 overflow-hidden transition-all duration-300 ${
-    isEmbedMode ? "h-full" : isExpanded ? "h-[78vh]" : "h-[610px]"
-  }`}
+ className={`relative z-10 overflow-hidden transition-all duration-300 ${
+  isEmbedMode ? "h-full" : isExpanded ? "h-[78vh]" : "h-[640px]"
+}`}
 >
             {step === "chat" && (
               <div className="flex h-full">
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="chat-scrollbar flex-1 overflow-y-auto px-5 pb-3 pt-4">
+                  <div className="chat-scrollbar flex-1 overflow-y-auto px-5 pb-0 pt-4">
                     <div className="space-y-3">
                       {messages.map((msg) => (
                         <div
@@ -806,8 +806,8 @@ if (!open && !isPageMode) {
                           <div
                             className={`animate-[fadeIn_.25s_ease] px-4 py-3 text-[13px] leading-[22px] shadow-sm ${
                               msg.role === "user"
-                                ? "max-w-[76%] rounded-[16px] rounded-tr-[8px] bg-[#eef8ff] text-[#374151]"
-                                : "max-w-[88%] rounded-[16px] rounded-tl-[8px] border border-[#edf1f5] bg-white text-[#333b48]"
+                                ? "max-w-[80%] rounded-[16px] rounded-tr-[8px] bg-[#eef8ff] text-[#374151]"
+                                : "max-w-[95%] rounded-[16px] rounded-tl-[8px] border border-[#edf1f5] bg-white text-[#333b48]"
                             }`}
                           >
                             <div>
@@ -852,7 +852,7 @@ if (!open && !isPageMode) {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="shrink-0 px-3 pb-1 pt-2">
+                  <div className="shrink-0 px-3 py-0">
                     <button
                       type="button"
                       onClick={() => setShowSuggestions((prev) => !prev)}
@@ -992,7 +992,7 @@ function ChatInput({
   return (
     <div className="overflow-visible px-4 pb-5 pt-2">
       <div className="chat-input-glow">
-        <div className="relative z-10 overflow-visible rounded-[18px] border border-[#edf1f5] bg-white px-3 py-3 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+        <div className="relative z-10 overflow-visible rounded-[18px] border border-[#edf1f5] bg-white px-3 py-2 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
           <div className="flex items-center gap-2">
             <input
               value={value}
