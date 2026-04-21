@@ -26,7 +26,7 @@
   );
 
   var popupHeight = parseInt(
-    (scriptTag && scriptTag.getAttribute("data-height")) || "590",
+    (scriptTag && scriptTag.getAttribute("data-height")) || "600",
     10
   );
 
@@ -325,7 +325,7 @@
   : bottomOffset + buttonSize + 14) + "px";
     popup.style.width = "1000px";
     popup.style.height = button.classList.contains("is-hidden")
-  ? "calc(84vh + " + (buttonSize + 14) + "px)"
+  ? "calc(82vh + " + (buttonSize + 14) + "px)"
   : "83vh";
     popup.style.maxWidth = "calc(100vw - 24px)";
     popup.style.maxHeight = "calc(100vh - 24px)";
