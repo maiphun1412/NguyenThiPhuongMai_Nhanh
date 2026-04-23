@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import {
   getMessagesFromFirebase,
@@ -24,6 +24,7 @@ import {
   saveConversationListForSession,
   setCurrentConversationId,
 } from "../../src/lib/chat-conversation";
+import { faqData, type FaqItem } from "../../src/lib/faq-data";
 
 const DEMO_REGISTER_URL =
   "https://demo.nhanhtravel.com/RegisterDemo/register_demo_form";
@@ -31,46 +32,244 @@ const DEMO_REGISTER_URL =
 const REGISTER_QUESTION = "Đăng ký sử dụng demo";
 const GUIDE_QUESTION = "Hướng dẫn sử dụng";
 
-const FOLLOW_UP_MAP: Record<string, string[]> = {
-  "Nhanh Travel là gì?": [
-    "Nhanh Travel có gì hay?",
-    "Phần mềm này phù hợp với ai?",
-    "Có thể quản lý tour như thế nào?",
-  ],
-  "Nhanh Travel có gì hay?": [
-    "Phần mềm này phù hợp với ai?",
-    "Có hỗ trợ chăm sóc khách hàng không?",
-    "Có tích hợp báo giá, đơn hàng không?",
-  ],
-  "Phần mềm này phù hợp với ai?": [
-    "Có thể quản lý tour như thế nào?",
-    "Có hỗ trợ chăm sóc khách hàng không?",
-    "Đăng ký sử dụng demo",
-  ],
-  "Có thể quản lý tour như thế nào?": [
-    "Có tích hợp báo giá, đơn hàng không?",
-    "Có hỗ trợ chăm sóc khách hàng không?",
-    "Đăng ký sử dụng demo",
-  ],
-  "Có hỗ trợ chăm sóc khách hàng không?": [
-    "Có tích hợp báo giá, đơn hàng không?",
-    "Đăng ký sử dụng demo",
-  ],
-  "Có tích hợp báo giá, đơn hàng không?": ["Đăng ký sử dụng demo"],
-};
-
-const INITIAL_SUGGESTIONS = Array.from(
-  new Set([...quickQuestions, GUIDE_QUESTION, REGISTER_QUESTION])
-);
-
 type ChatWidgetProps = {
   mode?: "popup" | "page" | "embed";
 };
 
-export default function ChatWidget({
-  mode = "popup",
-}: ChatWidgetProps) {
-  const router = useRouter();
+const FIXED_SUGGESTIONS = [GUIDE_QUESTION, REGISTER_QUESTION];
+
+function normalizeText(text?: string) {
+  return (text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uniqueStrings(items: string[]) {
+  return Array.from(new Set(items.filter((item) => item && item.trim() !== "")));
+}
+
+function isFixedSuggestion(question: string) {
+  const normalized = normalizeText(question);
+  return FIXED_SUGGESTIONS.some(
+    (item) => normalizeText(item) === normalized
+  );
+}
+
+function getParentFaqQuestions() {
+  return faqData
+    .filter((item) => item.isParent)
+    .map((item) => item.question)
+    .filter(Boolean);
+}
+
+function getFaqItemByQuestion(question: string) {
+  const normalizedQuestion = normalizeText(question);
+
+  return faqData.find(
+    (item) => normalizeText(item.question) === normalizedQuestion
+  );
+}
+
+function getChildQuestionsByParent(parentQuestion: string) {
+  const normalizedParent = normalizeText(parentQuestion);
+
+  return faqData
+    .filter(
+      (item) =>
+        normalizeText(item.parentQuestion) === normalizedParent &&
+        normalizeText(item.question) !== normalizedParent
+    )
+    .map((item) => item.question);
+}
+
+function getAskedQuestionsFromMessages(sourceMessages: Message[]) {
+  return sourceMessages
+    .filter(
+      (msg) =>
+        msg.role === "user" &&
+        typeof msg.text === "string" &&
+        msg.text.trim() !== ""
+    )
+    .map((msg) => normalizeText(msg.text));
+}
+
+function getUserQuestionCount(sourceMessages: Message[]) {
+  return sourceMessages.filter(
+    (msg) =>
+      msg.role === "user" &&
+      typeof msg.text === "string" &&
+      msg.text.trim() !== ""
+  ).length;
+}
+
+function scoreQuestionMatch(input: string, candidate: string) {
+  const a = normalizeText(input);
+  const b = normalizeText(candidate);
+
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  if (a.includes(b) || b.includes(a)) return 80;
+
+  const aWords = a.split(" ").filter(Boolean);
+  const bWords = b.split(" ").filter(Boolean);
+
+  let sameWords = 0;
+  for (const word of aWords) {
+    if (bWords.includes(word)) sameWords++;
+  }
+
+  return sameWords;
+}
+
+function findBestFaqItem(question: string) {
+  let bestItem: FaqItem | undefined;
+  let bestScore = 0;
+
+  for (const item of faqData) {
+    const score = scoreQuestionMatch(question, item.question);
+    if (score > bestScore) {
+      bestScore = score;
+      bestItem = item;
+    }
+  }
+
+  return { bestItem, bestScore };
+}
+
+function getInitialDynamicSuggestions() {
+  const parentQuestions = getParentFaqQuestions();
+
+  const fromParents = parentQuestions.slice(0, 3);
+  const fromQuickQuestions = quickQuestions.slice(0, 5);
+
+  return uniqueStrings([...fromParents, ...fromQuickQuestions]).slice(0, 8);
+}
+
+function buildDynamicSuggestionsFromFaq(
+  latestUserQuestion: string,
+  sourceMessages: Message[]
+) {
+  const asked = new Set(getAskedQuestionsFromMessages(sourceMessages));
+  const userQuestionCount = getUserQuestionCount(sourceMessages);
+  const { bestItem, bestScore } = findBestFaqItem(latestUserQuestion);
+
+  const suggestions: string[] = [];
+
+  if (bestItem && bestScore >= 2) {
+    const parentQuestion =
+      bestItem.parentQuestion && bestItem.parentQuestion.trim() !== ""
+        ? bestItem.parentQuestion
+        : bestItem.question;
+
+    const sameGroupChildren = getChildQuestionsByParent(parentQuestion);
+
+    suggestions.push(
+      ...sameGroupChildren.filter(
+        (question) => normalizeText(question) !== normalizeText(latestUserQuestion)
+      )
+    );
+
+    if (
+      normalizeText(parentQuestion) !== normalizeText(latestUserQuestion) &&
+      !bestItem.isParent
+    ) {
+      suggestions.unshift(parentQuestion);
+    }
+  }
+
+  const scoredGlobalQuestions = faqData
+    .map((item) => ({
+      question: item.question,
+      score: scoreQuestionMatch(latestUserQuestion, item.question),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.question);
+
+  suggestions.push(...scoredGlobalQuestions);
+
+  const cleaned = uniqueStrings(
+    suggestions.filter((question) => {
+      const normalizedQuestion = normalizeText(question);
+
+      if (!normalizedQuestion) return false;
+      if (isFixedSuggestion(question)) return false;
+      if (asked.has(normalizedQuestion)) return false;
+
+      return true;
+    })
+  );
+
+  const topDynamic = cleaned.slice(0, 8);
+
+  if (topDynamic.length > 0) {
+    return topDynamic;
+  }
+
+  const initialFallback = getInitialDynamicSuggestions().filter(
+    (question) => !asked.has(normalizeText(question))
+  );
+
+  if (initialFallback.length > 0) {
+    return initialFallback.slice(0, 8);
+  }
+
+  if (userQuestionCount >= 10) {
+    return ["Có case thực tế không?", "Giá và gói như thế nào?", "Triển khai bao lâu?"];
+  }
+
+  return getInitialDynamicSuggestions();
+}
+
+function buildSuggestedQuestions(
+  latestUserQuestion: string | null,
+  sourceMessages: Message[]
+) {
+  const userQuestionCount = getUserQuestionCount(sourceMessages);
+
+  const dynamicSuggestions = latestUserQuestion
+    ? buildDynamicSuggestionsFromFaq(latestUserQuestion, sourceMessages)
+    : getInitialDynamicSuggestions();
+
+  const orderedFixed =
+    userQuestionCount >= 10
+      ? [REGISTER_QUESTION, GUIDE_QUESTION]
+      : [GUIDE_QUESTION, REGISTER_QUESTION];
+
+  const merged = uniqueStrings([...dynamicSuggestions, ...orderedFixed]);
+
+  return merged.length > 0 ? merged : orderedFixed;
+}
+
+function renderMessageText(text?: string) {
+  if (!text) return null;
+
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (/^https?:\/\/[^\s]+$/.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="break-all rounded-md bg-blue-50 px-1 py-[1px] font-semibold text-blue-600 underline underline-offset-2 transition hover:bg-blue-100 hover:text-blue-800"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return <span key={index}>{part}</span>;
+  });
+}
+
+export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
 
   const [open, setOpen] = useState(false);
@@ -81,18 +280,20 @@ export default function ChatWidget({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [suggestedQuestions, setSuggestedQuestions] =
-    useState<string[]>(INITIAL_SUGGESTIONS);
-const closeEmbedWidget = () => {
-  setShowWelcomeBubble(false);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
+    buildSuggestedQuestions(null, [])
+  );
 
-  if (typeof window !== "undefined" && window.parent !== window) {
-    window.parent.postMessage({ type: "NHANH_CHAT_CLOSE" }, "*");
-    return;
-  }
+  const closeEmbedWidget = () => {
+    setShowWelcomeBubble(false);
 
-  setOpen(false);
-};
+    if (typeof window !== "undefined" && window.parent !== window) {
+      window.parent.postMessage({ type: "NHANH_CHAT_CLOSE" }, "*");
+      return;
+    }
+
+    setOpen(false);
+  };
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState("");
@@ -134,11 +335,11 @@ const closeEmbedWidget = () => {
   }, [pathname, isPageMode]);
 
   useEffect(() => {
-  if (isEmbedMode) {
-    setOpen(true);
-    setShowWelcomeBubble(false);
-  }
-}, [isEmbedMode]);
+    if (isEmbedMode) {
+      setOpen(true);
+      setShowWelcomeBubble(false);
+    }
+  }, [isEmbedMode]);
 
   const getActiveSession = () => {
     const sessionKey = getOrCreateChatSessionId();
@@ -149,38 +350,28 @@ const closeEmbedWidget = () => {
     window.open(DEMO_REGISTER_URL, "_blank", "noopener,noreferrer");
   };
 
-const goToGuidePage = () => {
-  setShowWelcomeBubble(false);
+  const goToGuidePage = () => {
+    setShowWelcomeBubble(false);
 
-  if (typeof window !== "undefined" && window.parent !== window) {
-    window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  setOpen(false);
-  window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
-};
-
-const goToFullChatPage = () => {
-  setShowWelcomeBubble(false);
-
-  if (typeof window !== "undefined" && window.parent !== window) {
-    window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  setOpen(false);
-  window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
-};
-
-  const buildNextSuggestions = (question: string) => {
-    const followUps = FOLLOW_UP_MAP[question];
-
-    if (followUps && followUps.length > 0) {
-      return Array.from(new Set([...followUps, REGISTER_QUESTION]));
+    if (typeof window !== "undefined" && window.parent !== window) {
+      window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
+      return;
     }
 
-    return INITIAL_SUGGESTIONS;
+    setOpen(false);
+    window.open("/huong-dan-su-dung", "_blank", "noopener,noreferrer");
+  };
+
+  const goToFullChatPage = () => {
+    setShowWelcomeBubble(false);
+
+    if (typeof window !== "undefined" && window.parent !== window) {
+      window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setOpen(false);
+    window.open("/tro-ly-ai", "_blank", "noopener,noreferrer");
   };
 
   const updateConversationMeta = (
@@ -223,23 +414,32 @@ const goToFullChatPage = () => {
       setCurrentConversationId(conversationId);
 
       if (oldMessages.length > 0) {
-        setMessages(
-          oldMessages.map((msg, index) => ({
-            id: index + 1,
-            role: msg.role,
-            text: msg.message,
-          }))
+        const mappedMessages = oldMessages.map((msg, index) => ({
+          id: index + 1,
+          role: msg.role,
+          text: msg.message,
+        })) as Message[];
+
+        setMessages(mappedMessages);
+
+        const latestUserMessage = [...mappedMessages]
+          .reverse()
+          .find((msg) => msg.role === "user" && msg.text)?.text;
+
+        setSuggestedQuestions(
+          buildSuggestedQuestions(latestUserMessage || null, mappedMessages)
         );
       } else {
         setMessages([defaultBotMessage]);
+        setSuggestedQuestions(buildSuggestedQuestions(null, []));
       }
 
       setStep("chat");
-      setSuggestedQuestions(INITIAL_SUGGESTIONS);
       setShowSuggestions(true);
     } catch (error) {
       console.error("Lỗi khi load conversation:", error);
       setMessages([defaultBotMessage]);
+      setSuggestedQuestions(buildSuggestedQuestions(null, []));
       setStep("chat");
     }
   };
@@ -271,7 +471,7 @@ const goToFullChatPage = () => {
     setIsTyping(false);
     setStep("chat");
     setShowSuggestions(true);
-    setSuggestedQuestions(INITIAL_SUGGESTIONS);
+    setSuggestedQuestions(buildSuggestedQuestions(null, []));
 
     try {
       await saveMessageToFirebase({
@@ -338,7 +538,10 @@ const goToFullChatPage = () => {
 
       setConversations(list);
 
-      if (list.length === 0) return;
+      if (list.length === 0) {
+        setSuggestedQuestions(buildSuggestedQuestions(null, []));
+        return;
+      }
 
       const currentConversationId = getCurrentConversationId();
       const selectedId = list.some((item) => item.id === currentConversationId)
@@ -372,27 +575,25 @@ const goToFullChatPage = () => {
 
     maybePromoteConversationTitle(conversationId, question);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: question,
-      },
-    ]);
+    const nextUserMessage: Message = {
+      id: messages.length + 1,
+      role: "user",
+      text: question,
+    };
 
+    setMessages((prev) => [...prev, nextUserMessage]);
+    setChatInput("");
     setIsTyping(true);
 
     setTimeout(async () => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: answer,
-          images,
-        },
-      ]);
+      const botMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: answer,
+        images,
+      };
+
+      setMessages((prev) => [...prev, botMessage]);
 
       await saveMessageToFirebase({
         sessionId: conversationId,
@@ -407,7 +608,11 @@ const goToFullChatPage = () => {
         updatedAt: Date.now(),
       }));
 
-      setSuggestedQuestions(buildNextSuggestions(question));
+      const nextSourceMessages: Message[] = [...messages, nextUserMessage, botMessage];
+
+      setSuggestedQuestions(
+        buildSuggestedQuestions(question, nextSourceMessages)
+      );
       setIsTyping(false);
       setStep("chat");
       setShowSuggestions(true);
@@ -442,22 +647,27 @@ const goToFullChatPage = () => {
 
     maybePromoteConversationTitle(conversationId, questionText);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: questionText,
-      },
-      {
-        id: prev.length + 2,
-        role: "bot",
-        text: botText,
-      },
-    ]);
+    const nextUserMessage: Message = {
+      id: messages.length + 1,
+      role: "user",
+      text: questionText,
+    };
+
+    const nextBotMessage: Message = {
+      id: messages.length + 2,
+      role: "bot",
+      text: botText,
+    };
+
+    setMessages((prev) => [...prev, nextUserMessage, nextBotMessage]);
+
+    const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
 
     setStep("chat");
-    setSuggestedQuestions(INITIAL_SUGGESTIONS);
+    setShowSuggestions(true);
+    setSuggestedQuestions(
+      buildSuggestedQuestions(questionText, nextSourceMessages)
+    );
 
     setTimeout(() => {
       goToRegisterDemo();
@@ -465,7 +675,7 @@ const goToFullChatPage = () => {
   };
 
   const handleQuickQuestion = async (question: string) => {
-    setShowSuggestions(false);
+    setShowSuggestions(true);
 
     if (question === GUIDE_QUESTION) {
       const sessionKey = getOrCreateChatSessionId();
@@ -495,22 +705,26 @@ const goToFullChatPage = () => {
 
       maybePromoteConversationTitle(conversationId, question);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "user",
-          text: question,
-        },
-        {
-          id: prev.length + 2,
-          role: "bot",
-          text: botText,
-        },
-      ]);
+      const nextUserMessage: Message = {
+        id: messages.length + 1,
+        role: "user",
+        text: question,
+      };
+
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: botText,
+      };
+
+      setMessages((prev) => [...prev, nextUserMessage, nextBotMessage]);
+
+      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
 
       setStep("chat");
-      setSuggestedQuestions(INITIAL_SUGGESTIONS);
+      setSuggestedQuestions(
+        buildSuggestedQuestions(question, nextSourceMessages)
+      );
 
       setTimeout(() => {
         goToGuidePage();
@@ -527,18 +741,22 @@ const goToFullChatPage = () => {
       return;
     }
 
-    const answer = answerMap[question] ?? {
-      text: "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.",
-    };
+    const matchedFaq = getFaqItemByQuestion(question);
+    const predefinedAnswer = answerMap[question];
 
-    await fakeBotReply(question, answer.text, answer.images || []);
+    const answerText =
+      predefinedAnswer?.text ||
+      matchedFaq?.answer ||
+      "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
+
+    const answerImages = predefinedAnswer?.images || [];
+
+    await fakeBotReply(question, answerText, answerImages);
   };
 
   const handleSendCustomMessage = async () => {
     const value = chatInput.trim();
     if (!value || isTyping) return;
-
-    setShowSuggestions(false);
 
     const sessionKey = getOrCreateChatSessionId();
     if (!sessionKey) return;
@@ -556,20 +774,19 @@ const goToFullChatPage = () => {
 
     maybePromoteConversationTitle(conversationId, value);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        role: "user",
-        text: value,
-      },
-    ]);
+    const nextUserMessage: Message = {
+      id: messages.length + 1,
+      role: "user",
+      text: value,
+    };
+
+    setMessages((prev) => [...prev, nextUserMessage]);
 
     setChatInput("");
     setIsTyping(true);
+    setShowSuggestions(true);
 
     try {
-      // API chat trả về câu trả lời dựa trên AI
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -595,23 +812,51 @@ const goToFullChatPage = () => {
         updatedAt: Date.now(),
       }));
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: botAnswer,
-        },
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: botAnswer,
+      };
+
+      setMessages((prev) => [...prev, nextBotMessage]);
+
+      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
+      const backendSuggestions = Array.isArray(data?.suggestions)
+        ? data.suggestions.filter(
+            (item: unknown): item is string =>
+              typeof item === "string" && item.trim().length > 0
+          )
+        : [];
+
+      const localSuggestions = buildDynamicSuggestionsFromFaq(
+        value,
+        nextSourceMessages
+      );
+
+      const mergedDynamicSuggestions = uniqueStrings([
+        ...backendSuggestions,
+        ...localSuggestions,
+      ]).slice(0, 8);
+
+      const userQuestionCount = getUserQuestionCount(nextSourceMessages);
+      const orderedFixed =
+        userQuestionCount >= 10
+          ? [REGISTER_QUESTION, GUIDE_QUESTION]
+          : [GUIDE_QUESTION, REGISTER_QUESTION];
+
+      const finalSuggestions = uniqueStrings([
+        ...mergedDynamicSuggestions,
+        ...orderedFixed,
       ]);
+
+      setSuggestedQuestions(finalSuggestions);
+      setStep("chat");
+      setShowSuggestions(true);
 
       if (data.action === "open_trial_form") {
         goToRegisterDemo();
         return;
       }
-
-      setSuggestedQuestions(INITIAL_SUGGESTIONS);
-      setStep("chat");
-      setShowSuggestions(true);
     } catch (error) {
       console.error("Lỗi khi gọi API chat:", error);
 
@@ -631,16 +876,19 @@ const goToFullChatPage = () => {
         updatedAt: Date.now(),
       }));
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          role: "bot",
-          text: errorText,
-        },
-      ]);
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: errorText,
+      };
 
-      setSuggestedQuestions(INITIAL_SUGGESTIONS);
+      setMessages((prev) => [...prev, nextBotMessage]);
+
+      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
+
+      setSuggestedQuestions(
+        buildSuggestedQuestions(value, nextSourceMessages)
+      );
       setStep("chat");
       setShowSuggestions(true);
     } finally {
@@ -648,151 +896,158 @@ const goToFullChatPage = () => {
     }
   };
 
-if (!open && !isPageMode) {
-  if (isEmbedMode) return null;
+  if (!open && !isPageMode) {
+    if (isEmbedMode) return null;
 
-  return (
-    <>
-      {showWelcomeBubble && (
-        <div className="fixed bottom-24 right-6 z-50">
-          <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-            <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
+    return (
+      <>
+        {showWelcomeBubble && (
+          <div className="fixed bottom-24 right-6 z-50">
+            <div className="relative w-[260px] rounded-2xl border border-[#e6f0ff] bg-white px-4 py-3 text-[13px] leading-[20px] text-[#334155] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+              <div className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 rounded-[2px] border-b border-r border-[#e6f0ff] bg-white" />
 
-            <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
-            <div className="mt-1">
-              Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm
-              hiểu tính năng và đăng ký dùng thử demo.
+              <div className="font-semibold text-[#1677ff]">Xin chào 👋</div>
+              <div className="mt-1">
+                Chào mừng bạn đến với Nhanh Travel. Mình có thể hỗ trợ bạn tìm
+                hiểu tính năng và đăng ký dùng thử demo.
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowWelcomeBubble(false)}
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
+              >
+                ×
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setShowWelcomeBubble(false)}
-              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-[#dbe4f0] bg-white text-[14px] text-[#6b7280] shadow-sm transition hover:bg-[#f8fafc]"
-            >
-              ×
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      <button
-        type="button"
-        onClick={() => {
-          setOpen(true);
-          setShowWelcomeBubble(false);
-        }}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
-      >
-        <img
-          src="/trangchu/chatbox.jpg"
-          alt="chat"
-          className="h-full w-full rounded-full object-cover"
-        />
-      </button>
-    </>
-  );
-}
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(true);
+            setShowWelcomeBubble(false);
+            setShowSuggestions(true);
+            setSuggestedQuestions(buildSuggestedQuestions(null, []));
+          }}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-[#1677ff] bg-white chat-glow transition hover:scale-110"
+        >
+          <img
+            src="/trangchu/chatbox.jpg"
+            alt="chat"
+            className="h-full w-full rounded-full object-cover"
+          />
+        </button>
+      </>
+    );
+  }
 
   return (
     <>
       <div
-  className={`transition-all duration-300 ${
-    isPageMode || isEmbedMode
-      ? "relative h-full w-full"
-      : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
-  isExpanded
-    ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
-    : "w-[420px] sm:w-[440px]"
-}`
-  }`}
->
-        <div
-  className={
-    isEmbedMode
-      ? "flex h-full w-full flex-col bg-white"
-      : "chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]"
-  }
->
-        <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
-  <div className="flex items-center gap-2">
-    <img
-      src="/trangchu/chatbox.jpg"
-      alt="avatar"
-      className="h-8 w-8 rounded-full object-cover"
-    />
-    <img
-      src="/trangchu/logo.png"
-      alt="Nhanh Travel"
-      className="h-5 w-auto object-contain"
-    />
-  </div>
-
-<div className="flex items-center gap-2">
-  {!isPageMode && (
-    <button
-      type="button"
-      onClick={() => {
-  if (typeof window !== "undefined" && window.parent !== window) {
-    window.parent.postMessage({ type: "NHANH_CHAT_HIDE_LAUNCHER" }, "*");
-  }
-  goToFullChatPage();
-}}
-      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
-      title="Mở trang chat riêng"
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
+        className={`transition-all duration-300 ${
+          isPageMode || isEmbedMode
+            ? "relative h-full w-full"
+            : `fixed bottom-4 right-4 z-50 max-w-[calc(100vw-16px)] sm:bottom-5 sm:right-5 ${
+                isExpanded
+                  ? "w-[92vw] sm:w-[760px] lg:w-[980px]"
+                  : "w-[420px] sm:w-[440px]"
+              }`
+        }`}
       >
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-      </svg>
-    </button>
-  )}
+        <div
+          className={
+            isEmbedMode
+              ? "flex h-full w-full flex-col bg-white"
+              : "chat-soft-card relative overflow-visible rounded-[22px] border border-[#ebeff5] bg-[#fefefe]"
+          }
+        >
+          <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
+            <div className="flex items-center gap-2">
+              <img
+                src="/trangchu/chatbox.jpg"
+                alt="avatar"
+                className="h-8 w-8 rounded-full object-cover"
+              />
+              <img
+                src="/trangchu/logo.png"
+                alt="Nhanh Travel"
+                className="h-5 w-auto object-contain"
+              />
+            </div>
 
+            <div className="flex items-center gap-2">
+              {!isPageMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.parent !== window) {
+                      window.parent.postMessage(
+                        { type: "NHANH_CHAT_HIDE_LAUNCHER" },
+                        "*"
+                      );
+                    }
+                    goToFullChatPage();
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-110 hover:border-[#7c3aed] hover:text-[#7c3aed]"
+                  title="Mở trang chat riêng"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                  </svg>
+                </button>
+              )}
 
- {!isPageMode && (
-  <button
-    type="button"
-    onClick={() => {
-      if (typeof window !== "undefined" && window.parent !== window) {
-        window.parent.postMessage({ type: "NHANH_CHAT_EXPAND" }, "*");
-        return;
-      }
+              {!isPageMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.parent !== window) {
+                      window.parent.postMessage(
+                        { type: "NHANH_CHAT_EXPAND" },
+                        "*"
+                      );
+                      return;
+                    }
 
-      setIsExpanded((prev) => !prev);
-    }}
-    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-    title="Mở rộng"
-  >
-    ⤢
-  </button>
-)}
+                    setIsExpanded((prev) => !prev);
+                  }}
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#4b5563] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+                  title="Mở rộng"
+                >
+                  ⤢
+                </button>
+              )}
 
-  {!isPageMode && (
-    <button
-      type="button"
-      onClick={closeEmbedWidget}
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
-      title="Đóng"
-    >
-      ×
-    </button>
-  )}
-</div>
-</div>
+              {!isPageMode && (
+                <button
+                  type="button"
+                  onClick={closeEmbedWidget}
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#d8dee8] bg-white text-[#6b7280] transition hover:scale-105 hover:border-[#bfdcff] hover:bg-[#f6fbff]"
+                  title="Đóng"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
 
           <div
- className={`relative z-10 overflow-hidden transition-all duration-300 ${
-  isEmbedMode ? "h-full" : isExpanded ? "h-[78vh]" : "h-[640px]"
-}`}
->
+            className={`relative z-10 overflow-hidden transition-all duration-300 ${
+              isEmbedMode ? "h-full" : isExpanded ? "h-[78vh]" : "h-[640px]"
+            }`}
+          >
             {step === "chat" && (
               <div className="flex h-full">
-                <div className="flex min-w-0 flex-1 flex-col w-full">
+                <div className="flex min-w-0 w-full flex-1 flex-col">
                   <div className="chat-scrollbar flex-1 overflow-y-auto px-2 pb-0 pt-4">
                     <div className="space-y-3">
                       {messages.map((msg) => (
@@ -812,7 +1067,11 @@ if (!open && !isPageMode) {
                             }`}
                           >
                             <div>
-                              {msg.text && <div>{msg.text}</div>}
+                              {msg.text && (
+                                <div className="whitespace-pre-line">
+                                  {renderMessageText(msg.text)}
+                                </div>
+                              )}
 
                               {msg.images && msg.images.length > 0 && (
                                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -872,10 +1131,10 @@ if (!open && !isPageMode) {
                     {showSuggestions && (
                       <div className="space-y-2">
                         <QuestionGrid
-  items={suggestedQuestions}
-  onClick={handleQuickQuestion}
-  className="mb-1"
-/>
+                          items={suggestedQuestions}
+                          onClick={handleQuickQuestion}
+                          className="mb-1"
+                        />
                       </div>
                     )}
                   </div>

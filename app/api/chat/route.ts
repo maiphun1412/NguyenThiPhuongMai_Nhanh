@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { faqData } from "@/data/faq";
+import { faqData, type FaqItem } from "@/src/lib/faq-data";
 
 const apiKey = process.env.OPENAI_API_KEY;
 
@@ -12,6 +12,10 @@ const client = new OpenAI({
   apiKey,
 });
 
+const DEMO_LINK =
+  "https://demo.nhanhtravel.com/RegisterDemo/register_demo_form";
+const GUIDE_LINK = "http://localhost:3000/huong-dan-su-dung";
+
 type ChatAction = "reply_only" | "open_trial_form";
 type ChatSource =
   | "system"
@@ -21,44 +25,109 @@ type ChatSource =
   | "ai-fallback"
   | "faq-fallback";
 
-function normalizeText(text: string) {
-  return text
+function normalizeText(text?: string) {
+  return (text || "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
+function scoreQuestionMatch(input: string, candidate: string) {
+  const a = normalizeText(input);
+  const b = normalizeText(candidate);
+
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  if (a.includes(b) || b.includes(a)) return 80;
+
+  const aWords = a.split(" ").filter(Boolean);
+  const bWords = b.split(" ").filter(Boolean);
+
+  let sameWords = 0;
+  for (const word of aWords) {
+    if (bWords.includes(word)) sameWords++;
+  }
+
+  return sameWords;
+}
+
+function uniqueStrings(items: string[]) {
+  return Array.from(new Set(items.filter((item) => item && item.trim() !== "")));
+}
+
+function getTopFaqMatches(message: string, limit = 5) {
+  return faqData
+    .map((item) => ({
+      item,
+      score: scoreQuestionMatch(message, item.question),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 function findBestFaq(message: string) {
-  const input = normalizeText(message);
+  const matches = getTopFaqMatches(message, 1);
+  const best = matches[0];
 
-  let bestMatch: null | {
-    question: string;
-    answer: string;
-    keywords: string[];
-  } = null;
+  return {
+    bestMatch: best?.item || null,
+    bestScore: best?.score || 0,
+  };
+}
 
-  let bestScore = 0;
+function buildSuggestionsFromFaq(
+  message: string,
+  primaryItem?: FaqItem | null
+): string[] {
+  const topMatches = getTopFaqMatches(message, 12);
+  const bestItem = primaryItem || topMatches[0]?.item || null;
 
-  for (const item of faqData) {
-    let score = 0;
+  const suggestions: string[] = [];
+  const normalizedMessage = normalizeText(message);
 
-    for (const keyword of item.keywords) {
-      const k = normalizeText(keyword);
-      if (input.includes(k)) score += 2;
-      if (input === k) score += 3;
+  if (bestItem) {
+    const parentQuestion =
+      bestItem.parentQuestion && bestItem.parentQuestion.trim() !== ""
+        ? bestItem.parentQuestion
+        : bestItem.question;
+
+    const sameGroupItems = faqData.filter(
+      (item) =>
+        normalizeText(item.parentQuestion) === normalizeText(parentQuestion)
+    );
+
+    const sortedSameGroup = sameGroupItems
+      .filter((item) => normalizeText(item.question) !== normalizedMessage)
+      .sort((a, b) => {
+        const aScore = scoreQuestionMatch(message, a.question);
+        const bScore = scoreQuestionMatch(message, b.question);
+        return bScore - aScore;
+      });
+
+    for (const item of sortedSameGroup) {
+      suggestions.push(item.question);
     }
 
-    const q = normalizeText(item.question);
-    if (input.includes(q) || q.includes(input)) score += 4;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = item;
+    if (
+      normalizeText(parentQuestion) !== normalizedMessage &&
+      !suggestions.some(
+        (question) => normalizeText(question) === normalizeText(parentQuestion)
+      )
+    ) {
+      suggestions.unshift(parentQuestion);
     }
   }
 
-  return { bestMatch, bestScore };
+  for (const match of topMatches) {
+    if (normalizeText(match.item.question) !== normalizedMessage) {
+      suggestions.push(match.item.question);
+    }
+  }
+
+  return uniqueStrings(suggestions).slice(0, 8);
 }
 
 function extractJsonObject(text: string) {
@@ -90,7 +159,8 @@ function jsonResponse(
   text: string,
   source: ChatSource,
   action: ChatAction,
-  status = 200
+  status = 200,
+  suggestions: string[] = []
 ) {
   return NextResponse.json(
     {
@@ -98,6 +168,7 @@ function jsonResponse(
       reply: text,
       source,
       action,
+      suggestions,
     },
     { status }
   );
@@ -109,61 +180,105 @@ export async function POST(req: NextRequest) {
     const message = String(body?.message || "").trim();
 
     if (!message) {
-      return jsonResponse("Vui lòng nhập câu hỏi.", "system", "reply_only", 400);
+      return jsonResponse(
+        "Vui lòng nhập câu hỏi.",
+        "system",
+        "reply_only",
+        400,
+        []
+      );
     }
 
     const normalized = normalizeText(message);
 
-    const trialKeywords = [
-      "dang ky",
-      "đăng ký",
-      "đăng kí",
-      "demo",
+    const showGuideLinkKeywords = [
+  "bảng giá chi tiết",
+  "bang gia chi tiet",
+  "xem giao diện thực tế",
+  "xem giao dien thuc te",
+  "hướng dẫn sử dụng",
+  "huong dan su dung",
+  "hướng dẫn",
+  "huong dan",
+  "cách sử dụng",
+  "cach su dung",
+  "cách dùng",
+  "cach dung",
+  "xem hướng dẫn",
+  "xem huong dan",
+];
+
+    const showDemoLinkKeywords = [
+      "đăng ký demo",
       "dang ky demo",
+      "đăng ký dùng thử",
       "dang ky dung thu",
+      "dùng thử",
       "dung thu",
-      "15 ngay",
-      "tu van",
-      "de lai thong tin",
-      "de lai thong tin nhu nao",
-      "de lai thong tin sao",
-      "de lai lien he",
-      "lien he toi",
-      "goi lai",
-      "ho tro lien he",
-      "muon duoc tu van",
+      "demo",
+      "đăng ký",
+      "dang ky",
+      "muốn đăng ký",
       "muon dang ky",
+      "cách đăng ký",
       "cach dang ky",
+      "làm sao đăng ký",
       "lam sao dang ky",
-      "xin tu van",
-      "toi muon duoc lien he",
-      "cho toi dang ky",
-      "co the tu van cho toi khong",
-      "thông tin",
+      "để lại thông tin",
+      "de lai thong tin",
+      "liên hệ tư vấn",
+      "lien he tu van",
+      "tư vấn",
+      "tu van",
     ];
 
-    const shouldOpenTrialForm = trialKeywords.some((keyword) =>
-      normalized.includes(keyword)
+    const shouldShowGuideLink = showGuideLinkKeywords.some((keyword) =>
+  normalized.includes(normalizeText(keyword))
+);
+
+if (shouldShowGuideLink) {
+  return jsonResponse(
+    `Dạ, bên em đã chuẩn bị đầy đủ tài liệu hướng dẫn chi tiết cũng như giao diện thực tế để anh/chị dễ dàng tham khảo và sử dụng.
+Anh/chị có thể xem trực tiếp tại liên kết dưới đây để nắm rõ hơn cách hệ thống vận hành cũng như các tính năng cụ thể ạ:
+${GUIDE_LINK}`,
+    "rule",
+    "reply_only",
+    200,
+    buildSuggestionsFromFaq(message)
+  );
+}
+
+    const shouldShowDemoLink = showDemoLinkKeywords.some((keyword) =>
+      normalized.includes(normalizeText(keyword))
     );
 
-    if (shouldOpenTrialForm) {
+    if (shouldShowDemoLink) {
       return jsonResponse(
-        "Vui lòng điền những thông tin dưới đây để đội ngũ hỗ trợ liên hệ và kích hoạt dùng thử.",
+        `Nếu anh/chị muốn đăng ký dùng thử hoặc cần tìm hiểu thêm trước khi triển khai, anh/chị có thể nhấn vào liên kết này để đăng ký trực tiếp. Sau khi nhận thông tin, đội ngũ Nhanh Travel sẽ hỗ trợ mình nhanh hơn và tư vấn phù hợp với mô hình của doanh nghiệp ạ:\n${DEMO_LINK}`,
         "rule",
-        "open_trial_form"
+        "reply_only",
+        200,
+        buildSuggestionsFromFaq(message)
       );
     }
 
     const { bestMatch, bestScore } = findBestFaq(message);
 
-    if (bestMatch && bestScore >= 4) {
-      return jsonResponse(bestMatch.answer, "faq", "reply_only");
+    if (bestMatch && bestScore >= 8) {
+      return jsonResponse(
+        bestMatch.answer,
+        "faq",
+        "reply_only",
+        200,
+        buildSuggestionsFromFaq(message, bestMatch)
+      );
     }
 
-    const faqContext = faqData
+    const topFaqMatches = getTopFaqMatches(message, 5);
+    const faqContext = topFaqMatches
       .map(
-        (item, index) =>
-          `${index + 1}. Câu hỏi: ${item.question}\nTrả lời chuẩn: ${item.answer}`
+        ({ item }, index) =>
+          `${index + 1}. Câu hỏi FAQ: ${item.question}\nTrả lời chuẩn: ${item.answer}`
       )
       .join("\n\n");
 
@@ -171,23 +286,21 @@ export async function POST(req: NextRequest) {
 Bạn là trợ lý tư vấn cho website Nhanh Travel.
 
 Yêu cầu bắt buộc:
-- Sử dụng thêm các thông tin đã được cung cấp trong hệ thống hoặc dữ liệu nội bộ
 - Trả lời bằng tiếng Việt.
-- Chỉ trả lời các câu hỏi liên quan đến sản phẩm, dịch vụ, chính sách, quy trình của Nhanh Travel. Không trả lời ngoài phạm vi này.
+- Chỉ trả lời các câu hỏi liên quan đến sản phẩm, dịch vụ, chính sách, quy trình của Nhanh Travel.
+- Không trả lời ngoài phạm vi.
 - Giọng văn thân thiện, tự nhiên, lễ phép.
-- Không trả lời cộc lốc, không trả lời quá ngắn.
-- Mỗi câu trả lời nên từ 3 đến 6 câu nếu là câu hỏi thông tin.
-- Ưu tiên giải thích rõ khách hàng sẽ nhận được gì, phù hợp với ai, lợi ích là gì.
-- Nếu câu hỏi liên quan đến chức năng, hãy nêu ngắn gọn:
-  1. chức năng đó là gì
-  2. giúp doanh nghiệp giải quyết vấn đề gì
-  3. lợi ích khi sử dụng
+- Không trả lời cộc lốc, không quá ngắn.
+- Ưu tiên bám sát dữ liệu FAQ chuẩn bên dưới.
 - Không tự bịa giá, số điện thoại, email, chính sách.
-- Nếu người dùng có ý định đăng ký demo, dùng thử, để lại thông tin, muốn được tư vấn hoặc muốn đội ngũ liên hệ lại, thì action phải là "open_trial_form".
-- Nếu chỉ là hỏi thông tin thông thường thì action phải là "reply_only".
-- Khi trả lời, ưu tiên văn phong tư vấn bán hàng nhẹ nhàng, rõ ràng, dễ hiểu.
+- Nếu câu hỏi có thể trả lời từ FAQ thì phải bám đúng ý FAQ.
+- Không tự động yêu cầu người dùng điền form.
+- Không trả action là "open_trial_form" cho các trường hợp người dùng tự nhập câu hỏi.
+- Với các câu hỏi về demo, dùng thử, tư vấn, liên hệ, chỉ nên trả lời bằng nội dung hướng dẫn và link để người dùng tự bấm.
+- Với các câu hỏi như "Bảng giá chi tiết", "Xem giao diện thực tế" hoặc "Hướng dẫn sử dụng", chỉ nên trả lời bằng link hướng dẫn để người dùng tự bấm.
+- Action luôn là "reply_only".
 
-DỮ LIỆU CHUẨN:
+DỮ LIỆU FAQ LIÊN QUAN NHẤT:
 ${faqContext}
 
 ⚠️ QUAN TRỌNG:
@@ -197,7 +310,7 @@ ${faqContext}
 - Không giải thích ngoài JSON
 
 Format bắt buộc:
-{"answer":"nội dung trả lời","action":"open_trial_form hoặc reply_only"}
+{"answer":"nội dung trả lời","action":"reply_only"}
 
 CÂU HỎI NGƯỜI DÙNG:
 ${message}
@@ -211,7 +324,7 @@ ${message}
           {
             role: "system",
             content:
-              "Bạn là trợ lý tư vấn của Nhanh Travel. Luôn trả về đúng 1 object JSON hợp lệ theo format đã yêu cầu.",
+              'Bạn là trợ lý tư vấn của Nhanh Travel. Luôn trả về đúng 1 object JSON hợp lệ theo format {"answer":"...","action":"reply_only"}.',
           },
           {
             role: "user",
@@ -228,34 +341,47 @@ ${message}
 
       if (!parsed || typeof parsed !== "object") {
         return jsonResponse(
-          "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.",
+          "Hiện tại tôi chưa có câu trả lời phù hợp. Anh/chị có thể đặt lại câu hỏi cụ thể hơn để em hỗ trợ chính xác hơn, hoặc tham khảo thêm thông tin tại trang hướng dẫn sử dụng của hệ thống ạ.",
           "ai-fallback",
-          "reply_only"
+          "reply_only",
+          200,
+          buildSuggestionsFromFaq(message, bestMatch)
         );
       }
 
       const finalAnswer =
         typeof parsed.answer === "string" && parsed.answer.trim()
           ? parsed.answer.trim()
-          : "Hiện tại tôi chưa có câu trả lời phù hợp. Bạn vui lòng để lại thông tin để được tư vấn thêm.";
+          : "Hiện tại tôi chưa có câu trả lời phù hợp. Anh/chị có thể đặt lại câu hỏi cụ thể hơn để em hỗ trợ chính xác hơn ạ.";
 
-      const finalAction: ChatAction =
-        parsed.action === "open_trial_form"
-          ? "open_trial_form"
-          : "reply_only";
+      const finalAction: ChatAction = "reply_only";
 
-      return jsonResponse(finalAnswer, "ai", finalAction);
+      return jsonResponse(
+        finalAnswer,
+        "ai",
+        finalAction,
+        200,
+        buildSuggestionsFromFaq(message, bestMatch)
+      );
     } catch (error) {
       console.error("Lỗi OpenAI:", error);
 
       if (bestMatch) {
-        return jsonResponse(bestMatch.answer, "faq-fallback", "reply_only");
+        return jsonResponse(
+          bestMatch.answer,
+          "faq-fallback",
+          "reply_only",
+          200,
+          buildSuggestionsFromFaq(message, bestMatch)
+        );
       }
 
       return jsonResponse(
-        "Hiện tại hệ thống AI đang bận. Anh/chị vui lòng để lại thông tin bên dưới, đội ngũ Nhanh Travel sẽ liên hệ hỗ trợ sớm ạ.",
+        `Hiện tại hệ thống AI đang bận một chút. Anh/chị vui lòng thử lại sau, hoặc nếu muốn xem thêm thông tin tổng quan thì có thể tham khảo tại liên kết này ạ:\n${GUIDE_LINK}`,
         "system",
-        "open_trial_form"
+        "reply_only",
+        200,
+        buildSuggestionsFromFaq(message)
       );
     }
   } catch (error) {
@@ -265,7 +391,8 @@ ${message}
       "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.",
       "system",
       "reply_only",
-      500
+      500,
+      []
     );
   }
 }
