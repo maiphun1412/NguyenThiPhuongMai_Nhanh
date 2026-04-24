@@ -14,6 +14,7 @@ import {
   type ConversationItem,
   type Message,
   type Step,
+  
 } from "../../src/lib/chatbot-data";
 import {
   buildPreviewTitle,
@@ -24,7 +25,7 @@ import {
   saveConversationListForSession,
   setCurrentConversationId,
 } from "../../src/lib/chat-conversation";
-import { faqData, type FaqItem } from "../../src/lib/faq-data";
+import { faqData, faqGroups, type FaqItem } from "../../src/lib/faq-data";
 
 const DEMO_REGISTER_URL =
   "https://demo.nhanhtravel.com/RegisterDemo/register_demo_form";
@@ -141,87 +142,104 @@ function findBestFaqItem(question: string) {
 }
 
 function getInitialDynamicSuggestions() {
-  const parentQuestions = getParentFaqQuestions();
-
-  const fromParents = parentQuestions.slice(0, 3);
-  const fromQuickQuestions = quickQuestions.slice(0, 5);
-
-  return uniqueStrings([...fromParents, ...fromQuickQuestions]).slice(0, 8);
+  return faqGroups.map((group) => group.parentQuestion).slice(0, 8);
 }
 
 function buildDynamicSuggestionsFromFaq(
   latestUserQuestion: string,
   sourceMessages: Message[]
 ) {
-  const asked = new Set(getAskedQuestionsFromMessages(sourceMessages));
-  const userQuestionCount = getUserQuestionCount(sourceMessages);
-  const { bestItem, bestScore } = findBestFaqItem(latestUserQuestion);
+  const normalizedQuestion = normalizeText(latestUserQuestion);
+
+  const userMessages = sourceMessages.filter(
+    (msg) =>
+      msg.role === "user" &&
+      typeof msg.text === "string" &&
+      msg.text.trim() !== ""
+  );
+
+  const recentAskedQuestions = new Set(
+    userMessages.slice(-10).map((msg) => normalizeText(msg.text))
+  );
+
+  const recentAskedParents = new Set(
+    userMessages
+      .filter((msg) =>
+        faqGroups.some(
+          (group) =>
+            normalizeText(group.parentQuestion) === normalizeText(msg.text)
+        )
+      )
+      .slice(-5)
+      .map((msg) => normalizeText(msg.text))
+  );
+
+  const matchedGroup = faqGroups.find((group) => {
+    const isParent =
+      normalizeText(group.parentQuestion) === normalizedQuestion;
+
+    const isChild = group.items.some(
+      (item) => normalizeText(item.question) === normalizedQuestion
+    );
+
+    return isParent || isChild;
+  });
 
   const suggestions: string[] = [];
 
-  if (bestItem && bestScore >= 2) {
-    const parentQuestion =
-      bestItem.parentQuestion && bestItem.parentQuestion.trim() !== ""
-        ? bestItem.parentQuestion
-        : bestItem.question;
+  if (matchedGroup) {
+    const sameGroupChildren = matchedGroup.items
+      .map((item) => item.question)
+      .filter((question) => {
+        const normalized = normalizeText(question);
 
-    const sameGroupChildren = getChildQuestionsByParent(parentQuestion);
+        if (!normalized) return false;
+        if (normalized === normalizedQuestion) return false;
+        if (isFixedSuggestion(question)) return false;
+        if (recentAskedQuestions.has(normalized)) return false;
 
-    suggestions.push(
-      ...sameGroupChildren.filter(
-        (question) => normalizeText(question) !== normalizeText(latestUserQuestion)
-      )
-    );
+        return true;
+      });
 
-    if (
-      normalizeText(parentQuestion) !== normalizeText(latestUserQuestion) &&
-      !bestItem.isParent
-    ) {
-      suggestions.unshift(parentQuestion);
-    }
+    suggestions.push(...sameGroupChildren);
   }
 
-  const scoredGlobalQuestions = faqData
-    .map((item) => ({
-      question: item.question,
-      score: scoreQuestionMatch(latestUserQuestion, item.question),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .map((item) => item.question);
+  if (suggestions.length < 8) {
+    const otherParentQuestions = faqGroups
+      .map((group) => group.parentQuestion)
+      .filter((question) => {
+        const normalized = normalizeText(question);
 
-  suggestions.push(...scoredGlobalQuestions);
+        if (!normalized) return false;
+        if (normalized === normalizedQuestion) return false;
+        if (isFixedSuggestion(question)) return false;
+        if (recentAskedParents.has(normalized)) return false;
 
-  const cleaned = uniqueStrings(
-    suggestions.filter((question) => {
-      const normalizedQuestion = normalizeText(question);
+        return true;
+      });
 
-      if (!normalizedQuestion) return false;
-      if (isFixedSuggestion(question)) return false;
-      if (asked.has(normalizedQuestion)) return false;
-
-      return true;
-    })
-  );
-
-  const topDynamic = cleaned.slice(0, 8);
-
-  if (topDynamic.length > 0) {
-    return topDynamic;
+    suggestions.push(...otherParentQuestions);
   }
 
-  const initialFallback = getInitialDynamicSuggestions().filter(
-    (question) => !asked.has(normalizeText(question))
-  );
+  if (suggestions.length < 8) {
+    const fallbackChildren = faqData
+      .filter((item) => !item.isParent)
+      .map((item) => item.question)
+      .filter((question) => {
+        const normalized = normalizeText(question);
 
-  if (initialFallback.length > 0) {
-    return initialFallback.slice(0, 8);
+        if (!normalized) return false;
+        if (normalized === normalizedQuestion) return false;
+        if (isFixedSuggestion(question)) return false;
+        if (recentAskedQuestions.has(normalized)) return false;
+
+        return true;
+      });
+
+    suggestions.push(...fallbackChildren);
   }
 
-  if (userQuestionCount >= 10) {
-    return ["Có case thực tế không?", "Giá và gói như thế nào?", "Triển khai bao lâu?"];
-  }
-
-  return getInitialDynamicSuggestions();
+  return uniqueStrings(suggestions).slice(0, 8);
 }
 
 function buildSuggestedQuestions(

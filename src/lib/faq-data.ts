@@ -19,7 +19,7 @@ Anh/chị đang quan tâm về tính năng, giá hay muốn xem Demo ạ?`;
 export const faqGroups: FaqGroup[] = [
   {
     title: "Giới thiệu chung",
-    parentQuestion: "Nhanh Travel là gì?",
+    parentQuestion: "Nhanh Travel là gì và giúp được gì?",
     parentAnswer: `Dạ, Nhanh Travel là hệ thống quản lý du lịch toàn diện, giúp doanh nghiệp vận hành trên một nền tảng duy nhất.
 Hệ thống hỗ trợ từ sale, điều hành tour, khách hàng, CRM, cho tới kế toán và báo cáo.
 Điểm mạnh là giúp doanh nghiệp tinh gọn vận hành, giảm sai sót và dễ mở rộng lâu dài ạ.`,
