@@ -26,13 +26,80 @@ type ChatSource =
   | "faq-fallback";
 
 function normalizeText(text?: string) {
-  return (text || "")
-    .toLowerCase()
+  if (!text) return "";
+
+  let result = text.toLowerCase();
+
+  const slangMap: Record<string, string> = {
+    ko: "khong",
+    k: "khong",
+    kh: "khong",
+    k0: "khong",
+    hok: "khong",
+    hong: "khong",
+    hông: "khong",
+
+    đc: "duoc",
+    dc: "duoc",
+
+    ntn: "nhu the nao",
+    bn: "bao nhieu",
+    "bao nhiu": "bao nhieu",
+
+    j: "gi",
+    z: "gi",
+
+    mk: "minh",
+    m: "minh",
+
+    kkchash: "khach",
+    khachh: "khach",
+    khachs: "khach",
+    khachsh: "khach",
+    hangg: "hang",
+  };
+
+  result = result
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  result = result
+    .split(/\s+/)
+    .map((word) => slangMap[word] || word)
+    .join(" ");
+
+  return result;
+}
+
+function levenshteinDistance(a: string, b: string) {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
 }
 
 function scoreQuestionMatch(input: string, candidate: string) {
@@ -47,11 +114,22 @@ function scoreQuestionMatch(input: string, candidate: string) {
   const bWords = b.split(" ").filter(Boolean);
 
   let sameWords = 0;
+
   for (const word of aWords) {
-    if (bWords.includes(word)) sameWords++;
+    const matched = bWords.some((targetWord) => {
+      if (word === targetWord) return true;
+
+      if (word.length <= 3 || targetWord.length <= 3) {
+        return false;
+      }
+
+      return levenshteinDistance(word, targetWord) <= 1;
+    });
+
+    if (matched) sameWords++;
   }
 
-  return sameWords;
+  return sameWords >= 2 ? sameWords : 0;
 }
 
 function uniqueStrings(items: string[]) {
@@ -231,6 +309,38 @@ export async function POST(req: NextRequest) {
       "tư vấn",
       "tu van",
     ];
+
+    const addressKeywords = [
+  "nhanh travel ở đâu",
+  "nhanh travel o dau",
+  "địa chỉ",
+  "dia chi",
+  "văn phòng",
+  "van phong",
+  "công ty ở đâu",
+  "cong ty o dau",
+  "bên mình ở đâu",
+  "ben minh o dau",
+  "bên bạn ở đâu",
+  "ben ban o dau",
+];
+
+const shouldShowAddress = addressKeywords.some((keyword) =>
+  normalized.includes(normalizeText(keyword))
+);
+
+if (shouldShowAddress) {
+  return jsonResponse(
+    `Nhanh Travel hiện có văn phòng tại:
+2A Nguyễn Sỹ Sách, Phường Tân Sơn, Thành phố Hồ Chí Minh.
+
+Anh/chị có thể đến trực tiếp để trao đổi hoặc liên hệ trước để bên em hỗ trợ tốt hơn.`,
+    "rule",
+    "reply_only",
+    200,
+    buildSuggestionsFromFaq(message)
+  );
+}
 
     const shouldShowGuideLink = showGuideLinkKeywords.some((keyword) =>
   normalized.includes(normalizeText(keyword))

@@ -35,4 +35,5 @@ export const faqData: FaqItem[] = [
     answer:
       "Hiện tại để nhận thông tin báo giá phù hợp, bạn vui lòng để lại thông tin để đội ngũ Nhanh Travel tư vấn theo nhu cầu doanh nghiệp."
   }
+  
 ];

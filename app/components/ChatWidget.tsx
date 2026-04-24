@@ -254,14 +254,19 @@ function renderMessageText(text?: string) {
     if (/^https?:\/\/[^\s]+$/.test(part)) {
       return (
         <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="break-all rounded-md bg-blue-50 px-1 py-[1px] font-semibold text-blue-600 underline underline-offset-2 transition hover:bg-blue-100 hover:text-blue-800"
-        >
-          {part}
-        </a>
+  key={index}
+  href={part}
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{
+    color: "#1677ff",
+    textDecoration: "underline",
+    fontWeight: 400,
+  }}
+  className="break-all hover:opacity-80"
+>
+  {part}
+</a>
       );
     }
 
