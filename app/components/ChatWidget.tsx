@@ -437,8 +437,6 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const loadConversationById = async (conversationId: string) => {
     try {
       const oldMessages = await getMessagesFromFirebase(conversationId);
-      console.log("LOAD oldMessages:", oldMessages);
-
       setActiveConversationId(conversationId);
       setCurrentConversationId(conversationId);
 
@@ -595,8 +593,6 @@ await saveMessageToFirebase({
 
     const conversationId = await ensureConversationReady();
     if (!conversationId) return;
-    console.log("SAVE images:", images);
-
     await saveMessageToFirebase({
       sessionId: conversationId,
       name: "anonymous",
@@ -633,6 +629,7 @@ await saveMessageToFirebase({
         sessionKey,
         role: "bot",
         message: answer,
+        images: images || [],
       });
 
       updateConversationMeta(conversationId, (item) => ({
@@ -789,17 +786,21 @@ await saveMessageToFirebase({
   const handleSendCustomMessage = async () => {
     const value = chatInput.trim();
     if (!value || isTyping) return;
-
     const matchedFaq = getFaqItemByQuestion(value);
+    const predefinedAnswer = answerMap[value];
 
-if (matchedFaq) {
-  await fakeBotReply(
-    value,
-    matchedFaq.answer,
-    matchedFaq.images || []
-  );
-  return;
-}
+    if (matchedFaq || predefinedAnswer) {
+      const answerText =
+        predefinedAnswer?.text ||
+        matchedFaq?.answer ||
+        "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
+
+      const answerImages =
+        predefinedAnswer?.images || matchedFaq?.images || [];
+
+      await fakeBotReply(value, answerText, answerImages);
+      return;
+    }
 
     const sessionKey = getOrCreateChatSessionId();
     if (!sessionKey) return;
@@ -848,6 +849,7 @@ if (matchedFaq) {
         sessionKey,
         role: "bot",
         message: botAnswer,
+        images: [],
       });
 
       updateConversationMeta(conversationId, (item) => ({
