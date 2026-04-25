@@ -294,14 +294,17 @@ function renderMessageText(text?: string) {
 
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
-
+  const [currentIndex, setCurrentIndex] = useState(0);
+const [isExpanded, setIsExpanded] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("chat");
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+const [previewIndex, setPreviewIndex] = useState(0);
+
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
     buildSuggestedQuestions(null, [])
@@ -772,7 +775,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       matchedFaq?.answer ||
       "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
 
-    const answerImages = predefinedAnswer?.images || [];
+    const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
 
     await fakeBotReply(question, answerText, answerImages);
   };
@@ -780,6 +783,17 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const handleSendCustomMessage = async () => {
     const value = chatInput.trim();
     if (!value || isTyping) return;
+
+    const matchedFaq = getFaqItemByQuestion(value);
+
+if (matchedFaq) {
+  await fakeBotReply(
+    value,
+    matchedFaq.answer,
+    matchedFaq.images || []
+  );
+  return;
+}
 
     const sessionKey = getOrCreateChatSessionId();
     if (!sessionKey) return;
@@ -1096,24 +1110,34 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
                                 </div>
                               )}
 
-                              {msg.images && msg.images.length > 0 && (
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  {msg.images.map((img, index) => (
-                                    <button
-                                      key={index}
-                                      type="button"
-                                      onClick={() => setPreviewImage(img)}
-                                      className="cursor-pointer overflow-hidden rounded-[12px] border border-[#e5e7eb] bg-white"
-                                    >
-                                      <img
-                                        src={img}
-                                        alt={`Giao diện ${index + 1}`}
-                                        className="h-[80px] w-full object-cover"
-                                      />
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
+                             {(() => {
+  const images = msg.images || [];
+
+  if (images.length === 0) return null;
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2">
+      {images.map((img, index) => (
+        <button
+          key={index}
+          type="button"
+          onClick={() => {
+            setPreviewImages(images);
+            setPreviewIndex(index);
+            setPreviewImage(img);
+          }}
+          className="cursor-pointer overflow-hidden rounded-[12px] border border-[#e5e7eb] bg-white"
+        >
+          <img
+            src={img}
+            alt={`Giao diện ${index + 1}`}
+            className="h-[80px] w-full object-cover"
+          />
+        </button>
+      ))}
+    </div>
+  );
+})()}
                             </div>
                           </div>
                         </div>
@@ -1176,31 +1200,63 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
         </div>
       </div>
 
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="relative max-h-[90vh] w-full max-w-[900px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute right-2 top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/90 text-[20px] text-[#111827] shadow"
-            >
-              ×
-            </button>
+     {previewImage && (
+  <div
+    className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4"
+    onClick={() => setPreviewImage(null)}
+  >
+    <div
+      className="relative max-h-[90vh] w-full max-w-[900px]"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => setPreviewImage(null)}
+        className="absolute right-2 top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/90 text-[20px] text-[#111827] shadow"
+      >
+        ×
+      </button>
 
-            <img
-              src={previewImage ?? ""}
-              alt="Xem ảnh lớn"
-              className="max-h-[90vh] w-full rounded-[16px] object-contain"
-            />
-          </div>
-        </div>
+      {previewImages.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              const nextIndex =
+                previewIndex === 0 ? previewImages.length - 1 : previewIndex - 1;
+
+              setPreviewIndex(nextIndex);
+              setPreviewImage(previewImages[nextIndex]);
+            }}
+            className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const nextIndex =
+                previewIndex === previewImages.length - 1 ? 0 : previewIndex + 1;
+
+              setPreviewIndex(nextIndex);
+              setPreviewImage(previewImages[nextIndex]);
+            }}
+            className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
+          >
+            ›
+          </button>
+        </>
       )}
+
+      <img
+        src={previewImage}
+        alt="Xem ảnh lớn"
+        className="max-h-[90vh] w-full rounded-[16px] object-contain"
+      />
+    </div>
+  </div>
+)}
     </>
   );
 }
