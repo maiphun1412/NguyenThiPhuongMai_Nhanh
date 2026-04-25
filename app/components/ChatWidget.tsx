@@ -294,16 +294,18 @@ function renderMessageText(text?: string) {
 
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
+
   const [currentIndex, setCurrentIndex] = useState(0);
-const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("chat");
   const [showWelcomeBubble, setShowWelcomeBubble] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [chatInput, setChatInput] = useState("");
+
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewIndex, setPreviewIndex] = useState(0);
 
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>(
@@ -440,11 +442,12 @@ const [previewIndex, setPreviewIndex] = useState(0);
       setCurrentConversationId(conversationId);
 
       if (oldMessages.length > 0) {
-        const mappedMessages = oldMessages.map((msg, index) => ({
-          id: index + 1,
-          role: msg.role,
-          text: msg.message,
-        })) as Message[];
+       const mappedMessages = oldMessages.map((msg, index) => ({
+  id: index + 1,
+  role: msg.role,
+  text: msg.message,
+  images: msg.images || [],
+})) as Message[];
 
         setMessages(mappedMessages);
 
@@ -500,13 +503,14 @@ const [previewIndex, setPreviewIndex] = useState(0);
     setSuggestedQuestions(buildSuggestedQuestions(null, []));
 
     try {
-      await saveMessageToFirebase({
-        sessionId: newConversation.id,
-        name: "anonymous",
-        sessionKey,
-        role: "bot",
-        message: defaultBotMessage.text || "",
-      });
+await saveMessageToFirebase({
+  sessionId: activeConversationId,
+  name: "anonymous",
+  sessionKey,
+  role: "bot",
+  message: defaultBotMessage.text || "",
+  images: [],
+});
     } catch (error) {
       console.error("Lỗi khi tạo conversation mới:", error);
     }
@@ -775,7 +779,7 @@ const [previewIndex, setPreviewIndex] = useState(0);
       matchedFaq?.answer ||
       "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
 
-    const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
+   const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
 
     await fakeBotReply(question, answerText, answerImages);
   };

@@ -7,6 +7,7 @@ export type FirebaseMessage = {
   sessionKey: string;
   role: "user" | "bot";
   message: string;
+  images?: string[];
   createdAt: number;
 };
 
@@ -16,6 +17,7 @@ type SaveMessageParams = {
   sessionKey: string;
   role: "user" | "bot";
   message: string;
+  images?: string[];
 };
 
 const BASE_PATH = "nhanhtravel-website/maiphuong/chats";
@@ -26,6 +28,7 @@ export async function saveMessageToFirebase({
   sessionKey,
   role,
   message,
+  images = [],
 }: SaveMessageParams) {
   const messagesRef = ref(db, `${BASE_PATH}/${sessionId}/messages`);
   const newMessageRef = push(messagesRef);
@@ -35,6 +38,7 @@ export async function saveMessageToFirebase({
     sessionKey,
     role,
     message,
+    images,
     createdAt: Date.now(),
   });
 }
@@ -47,10 +51,7 @@ export async function getMessagesFromFirebase(
 
   if (!snapshot.exists()) return [];
 
-  const data = snapshot.val() as Record<
-    string,
-    Omit<FirebaseMessage, "id">
-  >;
+  const data = snapshot.val() as Record<string, Omit<FirebaseMessage, "id">>;
 
   return Object.entries(data)
     .map(([id, value]) => ({
@@ -59,10 +60,12 @@ export async function getMessagesFromFirebase(
       sessionKey: value.sessionKey || "",
       role: value.role || "user",
       message: value.message || "",
+      images: value.images || [],
       createdAt: value.createdAt || 0,
     }))
     .sort((a, b) => a.createdAt - b.createdAt);
 }
+
 type SaveTrialFormParams = {
   conversationId: string;
   sessionKey: string;
