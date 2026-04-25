@@ -437,6 +437,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const loadConversationById = async (conversationId: string) => {
     try {
       const oldMessages = await getMessagesFromFirebase(conversationId);
+      console.log("LOAD oldMessages:", oldMessages);
 
       setActiveConversationId(conversationId);
       setCurrentConversationId(conversationId);
@@ -504,7 +505,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
 
     try {
 await saveMessageToFirebase({
-  sessionId: activeConversationId,
+  sessionId: newConversation.id,
   name: "anonymous",
   sessionKey,
   role: "bot",
@@ -594,6 +595,7 @@ await saveMessageToFirebase({
 
     const conversationId = await ensureConversationReady();
     if (!conversationId) return;
+    console.log("SAVE images:", images);
 
     await saveMessageToFirebase({
       sessionId: conversationId,
