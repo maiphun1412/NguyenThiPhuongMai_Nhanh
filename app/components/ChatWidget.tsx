@@ -307,26 +307,7 @@ function renderMessageText(text?: string) {
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
 
-  const secretClickCountRef = useRef(0);
-  const secretTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function handleSecretLogoClick() {
-  secretClickCountRef.current += 1;
-
-  if (secretTimerRef.current) {
-    clearTimeout(secretTimerRef.current);
-  }
-
-  secretTimerRef.current = setTimeout(() => {
-    secretClickCountRef.current = 0;
-  }, 1800);
-
-  if (secretClickCountRef.current >= 5) {
-    secretClickCountRef.current = 0;
-
-    window.open("/admin-login", "_blank", "noopener,noreferrer");
-  }
-}
+ 
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -1119,30 +1100,16 @@ await saveMessageToFirebase({
         >
           <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
             <div className="flex items-center gap-2">
-              <button
-  type="button"
-  onClick={handleSecretLogoClick}
-  title="Nhanh Travel"
-  className="cursor-default border-none bg-transparent p-0"
->
-  <img
-    src="/trangchu/chatbox.jpg"
-    alt="avatar"
-    className="h-8 w-8 rounded-full object-cover"
-  />
-</button>
-              <button
-  type="button"
-  onClick={handleSecretLogoClick}
-  title="Nhanh Travel"
-  className="cursor-default border-none bg-transparent p-0"
->
-  <img
-    src="/trangchu/logo.png"
-    alt="Nhanh Travel"
-    className="h-5 w-auto object-contain"
-  />
-</button>
+             <img
+  src="/trangchu/chatbox.jpg"
+  alt="avatar"
+  className="h-8 w-8 rounded-full object-cover"
+/>
+              <img
+  src="/trangchu/logo.png"
+  alt="Nhanh Travel"
+  className="h-5 w-auto object-contain"
+/>
             </div>
 
             <div className="flex items-center gap-2">
