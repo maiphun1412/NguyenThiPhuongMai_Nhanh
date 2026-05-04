@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
   getMessagesFromFirebase,
@@ -48,6 +48,18 @@ function normalizeText(text?: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+function hasEmailOrPhone(text: string) {
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+  const phoneRegex =
+    /(?:\(?\+?84\)?|84|0)(?:\s|\.|-)?(?:[0-9]{2,3})(?:\s|\.|-)?(?:[0-9]{3})(?:\s|\.|-)?(?:[0-9]{3,4})/;
+
+  return emailRegex.test(text) || phoneRegex.test(text);
+}
+
+const CONTACT_RECEIVED_REPLY =
+  "Dạ, Nhanh Travel đã nhận được thông tin liên hệ của anh/chị. Đội ngũ tư vấn sẽ liên hệ lại trong thời gian sớm nhất để hỗ trợ chi tiết hơn ạ.";
 
 function uniqueStrings(items: string[]) {
   return Array.from(new Set(items.filter((item) => item && item.trim() !== "")));
@@ -294,6 +306,27 @@ function renderMessageText(text?: string) {
 
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const secretClickCountRef = useRef(0);
+  const secretTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSecretLogoClick() {
+    secretClickCountRef.current += 1;
+
+    if (secretTimerRef.current) {
+      clearTimeout(secretTimerRef.current);
+    }
+
+    secretTimerRef.current = setTimeout(() => {
+      secretClickCountRef.current = 0;
+    }, 1800);
+
+    if (secretClickCountRef.current >= 5) {
+      secretClickCountRef.current = 0;
+      router.push("/admin-login");
+    }
+  }
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -784,162 +817,238 @@ await saveMessageToFirebase({
   };
 
   const handleSendCustomMessage = async () => {
-    const value = chatInput.trim();
-    if (!value || isTyping) return;
-    const matchedFaq = getFaqItemByQuestion(value);
-    const predefinedAnswer = answerMap[value];
+  const value = chatInput.trim();
+  if (!value || isTyping) return;
 
-    if (matchedFaq || predefinedAnswer) {
-      const answerText =
-        predefinedAnswer?.text ||
-        matchedFaq?.answer ||
-        "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
+  const sessionKey = getOrCreateChatSessionId();
+  if (!sessionKey) return;
 
-      const answerImages =
-        predefinedAnswer?.images || matchedFaq?.images || [];
+  const conversationId = await ensureConversationReady();
+  if (!conversationId) return;
 
-      await fakeBotReply(value, answerText, answerImages);
-      return;
-    }
+  await saveMessageToFirebase({
+    sessionId: conversationId,
+    name: "anonymous",
+    sessionKey,
+    role: "user",
+    message: value,
+  });
 
-    const sessionKey = getOrCreateChatSessionId();
-    if (!sessionKey) return;
+  maybePromoteConversationTitle(conversationId, value);
 
-    const conversationId = await ensureConversationReady();
-    if (!conversationId) return;
+  const nextUserMessage: Message = {
+    id: messages.length + 1,
+    role: "user",
+    text: value,
+  };
+
+  setMessages((prev) => [...prev, nextUserMessage]);
+  setChatInput("");
+  setIsTyping(true);
+  setShowSuggestions(true);
+
+  if (hasEmailOrPhone(value)) {
+    await saveMessageToFirebase({
+      sessionId: conversationId,
+      name: "anonymous",
+      sessionKey,
+      role: "bot",
+      message: CONTACT_RECEIVED_REPLY,
+      images: [],
+    });
+
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
+
+    const nextBotMessage: Message = {
+      id: messages.length + 2,
+      role: "bot",
+      text: CONTACT_RECEIVED_REPLY,
+    };
+
+    setMessages((prev) => [...prev, nextBotMessage]);
+
+    const nextSourceMessages: Message[] = [
+      ...messages,
+      nextUserMessage,
+      nextBotMessage,
+    ];
+
+    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+    setStep("chat");
+    setShowSuggestions(true);
+    setIsTyping(false);
+
+    return;
+  }
+
+  const matchedFaq = getFaqItemByQuestion(value);
+  const predefinedAnswer = answerMap[value];
+
+  if (matchedFaq || predefinedAnswer) {
+    const answerText =
+      predefinedAnswer?.text ||
+      matchedFaq?.answer ||
+      "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
+
+    const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
 
     await saveMessageToFirebase({
       sessionId: conversationId,
       name: "anonymous",
       sessionKey,
-      role: "user",
-      message: value,
+      role: "bot",
+      message: answerText,
+      images: answerImages,
     });
 
-    maybePromoteConversationTitle(conversationId, value);
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
 
-    const nextUserMessage: Message = {
-      id: messages.length + 1,
-      role: "user",
-      text: value,
+    const nextBotMessage: Message = {
+      id: messages.length + 2,
+      role: "bot",
+      text: answerText,
+      images: answerImages,
     };
 
-    setMessages((prev) => [...prev, nextUserMessage]);
+    setMessages((prev) => [...prev, nextBotMessage]);
 
-    setChatInput("");
-    setIsTyping(true);
+    const nextSourceMessages: Message[] = [
+      ...messages,
+      nextUserMessage,
+      nextBotMessage,
+    ];
+
+    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+    setStep("chat");
+    setShowSuggestions(true);
+    setIsTyping(false);
+
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: value }),
+    });
+
+    const data = await res.json();
+    const botAnswer =
+      data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
+
+    await saveMessageToFirebase({
+      sessionId: conversationId,
+      name: "anonymous",
+      sessionKey,
+      role: "bot",
+      message: botAnswer,
+      images: [],
+    });
+
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
+
+    const nextBotMessage: Message = {
+      id: messages.length + 2,
+      role: "bot",
+      text: botAnswer,
+    };
+
+    setMessages((prev) => [...prev, nextBotMessage]);
+
+    const nextSourceMessages: Message[] = [
+      ...messages,
+      nextUserMessage,
+      nextBotMessage,
+    ];
+
+    const backendSuggestions = Array.isArray(data?.suggestions)
+      ? data.suggestions.filter(
+          (item: unknown): item is string =>
+            typeof item === "string" && item.trim().length > 0
+        )
+      : [];
+
+    const localSuggestions = buildDynamicSuggestionsFromFaq(
+      value,
+      nextSourceMessages
+    );
+
+    const mergedDynamicSuggestions = uniqueStrings([
+      ...backendSuggestions,
+      ...localSuggestions,
+    ]).slice(0, 8);
+
+    const userQuestionCount = getUserQuestionCount(nextSourceMessages);
+    const orderedFixed =
+      userQuestionCount >= 10
+        ? [REGISTER_QUESTION, GUIDE_QUESTION]
+        : [GUIDE_QUESTION, REGISTER_QUESTION];
+
+    const finalSuggestions = uniqueStrings([
+      ...mergedDynamicSuggestions,
+      ...orderedFixed,
+    ]);
+
+    setSuggestedQuestions(finalSuggestions);
+    setStep("chat");
     setShowSuggestions(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: value }),
-      });
-
-      const data = await res.json();
-      const botAnswer =
-        data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
-
-      await saveMessageToFirebase({
-        sessionId: conversationId,
-        name: "anonymous",
-        sessionKey,
-        role: "bot",
-        message: botAnswer,
-        images: [],
-      });
-
-      updateConversationMeta(conversationId, (item) => ({
-        ...item,
-        updatedAt: Date.now(),
-      }));
-
-      const nextBotMessage: Message = {
-        id: messages.length + 2,
-        role: "bot",
-        text: botAnswer,
-      };
-
-      setMessages((prev) => [...prev, nextBotMessage]);
-
-      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
-      const backendSuggestions = Array.isArray(data?.suggestions)
-        ? data.suggestions.filter(
-            (item: unknown): item is string =>
-              typeof item === "string" && item.trim().length > 0
-          )
-        : [];
-
-      const localSuggestions = buildDynamicSuggestionsFromFaq(
-        value,
-        nextSourceMessages
-      );
-
-      const mergedDynamicSuggestions = uniqueStrings([
-        ...backendSuggestions,
-        ...localSuggestions,
-      ]).slice(0, 8);
-
-      const userQuestionCount = getUserQuestionCount(nextSourceMessages);
-      const orderedFixed =
-        userQuestionCount >= 10
-          ? [REGISTER_QUESTION, GUIDE_QUESTION]
-          : [GUIDE_QUESTION, REGISTER_QUESTION];
-
-      const finalSuggestions = uniqueStrings([
-        ...mergedDynamicSuggestions,
-        ...orderedFixed,
-      ]);
-
-      setSuggestedQuestions(finalSuggestions);
-      setStep("chat");
-      setShowSuggestions(true);
-
-      if (data.action === "open_trial_form") {
-        goToRegisterDemo();
-        return;
-      }
-    } catch (error) {
-      console.error("Lỗi khi gọi API chat:", error);
-
-      const errorText =
-        "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
-
-      await saveMessageToFirebase({
-        sessionId: conversationId,
-        name: "anonymous",
-        sessionKey,
-        role: "bot",
-        message: errorText,
-      });
-
-      updateConversationMeta(conversationId, (item) => ({
-        ...item,
-        updatedAt: Date.now(),
-      }));
-
-      const nextBotMessage: Message = {
-        id: messages.length + 2,
-        role: "bot",
-        text: errorText,
-      };
-
-      setMessages((prev) => [...prev, nextBotMessage]);
-
-      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
-
-      setSuggestedQuestions(
-        buildSuggestedQuestions(value, nextSourceMessages)
-      );
-      setStep("chat");
-      setShowSuggestions(true);
-    } finally {
-      setIsTyping(false);
+    if (data.action === "open_trial_form") {
+      goToRegisterDemo();
+      return;
     }
-  };
+  } catch (error) {
+    console.error("Lỗi khi gọi API chat:", error);
+
+    const errorText =
+      "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
+
+    await saveMessageToFirebase({
+      sessionId: conversationId,
+      name: "anonymous",
+      sessionKey,
+      role: "bot",
+      message: errorText,
+    });
+
+    updateConversationMeta(conversationId, (item) => ({
+      ...item,
+      updatedAt: Date.now(),
+    }));
+
+    const nextBotMessage: Message = {
+      id: messages.length + 2,
+      role: "bot",
+      text: errorText,
+    };
+
+    setMessages((prev) => [...prev, nextBotMessage]);
+
+    const nextSourceMessages: Message[] = [
+      ...messages,
+      nextUserMessage,
+      nextBotMessage,
+    ];
+
+    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+    setStep("chat");
+    setShowSuggestions(true);
+  } finally {
+    setIsTyping(false);
+  }
+};
 
   if (!open && !isPageMode) {
     if (isEmbedMode) return null;
@@ -1010,16 +1119,30 @@ await saveMessageToFirebase({
         >
           <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
             <div className="flex items-center gap-2">
-              <img
-                src="/trangchu/chatbox.jpg"
-                alt="avatar"
-                className="h-8 w-8 rounded-full object-cover"
-              />
-              <img
-                src="/trangchu/logo.png"
-                alt="Nhanh Travel"
-                className="h-5 w-auto object-contain"
-              />
+              <button
+  type="button"
+  onClick={handleSecretLogoClick}
+  title="Nhanh Travel"
+  className="cursor-default border-none bg-transparent p-0"
+>
+  <img
+    src="/trangchu/chatbox.jpg"
+    alt="avatar"
+    className="h-8 w-8 rounded-full object-cover"
+  />
+</button>
+              <button
+  type="button"
+  onClick={handleSecretLogoClick}
+  title="Nhanh Travel"
+  className="cursor-default border-none bg-transparent p-0"
+>
+  <img
+    src="/trangchu/logo.png"
+    alt="Nhanh Travel"
+    className="h-5 w-auto object-contain"
+  />
+</button>
             </div>
 
             <div className="flex items-center gap-2">

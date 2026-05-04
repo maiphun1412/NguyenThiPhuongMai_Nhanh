@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 
 type ChatMessage = {
   role: "user" | "bot";
@@ -29,6 +30,15 @@ const quickQuestions = [
 ];
 
 export default function FloatingChat() {
+
+    const pathname = usePathname();
+
+  const hiddenOnPages = ["/chat-history", "/extracted-info"];
+
+  if (hiddenOnPages.some((path) => pathname.startsWith(path))) {
+    return null;
+  }
+  
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "bot",
