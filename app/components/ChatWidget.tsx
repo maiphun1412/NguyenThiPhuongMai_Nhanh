@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import {
   getMessagesFromFirebase,
@@ -306,27 +306,27 @@ function renderMessageText(text?: string) {
 
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   const secretClickCountRef = useRef(0);
   const secretTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleSecretLogoClick() {
-    secretClickCountRef.current += 1;
+  secretClickCountRef.current += 1;
 
-    if (secretTimerRef.current) {
-      clearTimeout(secretTimerRef.current);
-    }
-
-    secretTimerRef.current = setTimeout(() => {
-      secretClickCountRef.current = 0;
-    }, 1800);
-
-    if (secretClickCountRef.current >= 5) {
-      secretClickCountRef.current = 0;
-      router.push("/admin-login");
-    }
+  if (secretTimerRef.current) {
+    clearTimeout(secretTimerRef.current);
   }
+
+  secretTimerRef.current = setTimeout(() => {
+    secretClickCountRef.current = 0;
+  }, 1800);
+
+  if (secretClickCountRef.current >= 5) {
+    secretClickCountRef.current = 0;
+
+    window.open("/admin-login", "_blank", "noopener,noreferrer");
+  }
+}
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
