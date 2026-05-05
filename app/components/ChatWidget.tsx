@@ -14,7 +14,6 @@ import {
   type ConversationItem,
   type Message,
   type Step,
-  
 } from "../../src/lib/chatbot-data";
 import {
   buildPreviewTitle,
@@ -58,8 +57,86 @@ function hasEmailOrPhone(text: string) {
   return emailRegex.test(text) || phoneRegex.test(text);
 }
 
+function extractCustomerNameFromText(text: string) {
+  const cleanedText = text.replace(/\s+/g, " ").trim();
+
+  const patterns = [
+    /(?:tên mình là|mình tên là|em tên là|tên em là|anh tên là|chị tên là|tôi tên là|mình là|em là|tôi là)\s+([A-Za-zÀ-ỹ\s]{2,50})/i,
+    /(?:họ tên|họ và tên|hoten)\s*(?:là|:|-)?\s*([A-Za-zÀ-ỹ\s]{2,50})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanedText.match(pattern);
+
+    if (match?.[1]) {
+      return match[1]
+        .replace(/(?:số điện thoại|sdt|sđt|phone|email|gmail|zalo).*$/i, "")
+        .replace(/[,:;-]+$/g, "")
+        .trim();
+    }
+  }
+
+  const parts = cleanedText
+    .split(/[-,|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const firstPart = parts[0] || "";
+
+  const looksLikeName =
+    /^[A-Za-zÀ-ỹ\s]{2,50}$/.test(firstPart) &&
+    firstPart.split(/\s+/).length >= 2 &&
+    !hasEmailOrPhone(firstPart);
+
+  if (looksLikeName) {
+    return firstPart;
+  }
+
+  return "";
+}
+
 const CONTACT_RECEIVED_REPLY =
   "Dạ, Nhanh Travel đã nhận được thông tin liên hệ của anh/chị. Đội ngũ tư vấn sẽ liên hệ lại trong thời gian sớm nhất để hỗ trợ chi tiết hơn ạ.";
+
+function getNameReceivedReply(name: string) {
+  return `Dạ, Nhanh Travel đã nhận được họ tên ${name} của anh/chị. Anh/chị vui lòng để lại thêm số điện thoại hoặc email để đội ngũ tư vấn liên hệ hỗ trợ chi tiết hơn ạ.`;
+}
+
+const ASK_CONTACT_AFTER_QUESTION_COUNT = 3;
+
+const ASK_CONTACT_INFO_REPLY =
+  "Dạ, để đội ngũ Nhanh Travel tư vấn chi tiết hơn, anh/chị vui lòng để lại họ tên, số điện thoại hoặc email ạ.";
+
+function hasAskedContactInfo(sourceMessages: Message[]) {
+  return sourceMessages.some((msg) => {
+    const text = msg.text || "";
+
+    return (
+      msg.role === "bot" &&
+      (text === ASK_CONTACT_INFO_REPLY ||
+        text.includes("vui lòng để lại thêm số điện thoại hoặc email"))
+    );
+  });
+}
+
+function hasUserProvidedContactInfo(sourceMessages: Message[]) {
+  return sourceMessages.some(
+    (msg) =>
+      msg.role === "user" &&
+      typeof msg.text === "string" &&
+      hasEmailOrPhone(msg.text)
+  );
+}
+
+function shouldAskContactInfo(sourceMessages: Message[]) {
+  const userQuestionCount = getUserQuestionCount(sourceMessages);
+
+  return (
+    userQuestionCount >= ASK_CONTACT_AFTER_QUESTION_COUNT &&
+    !hasAskedContactInfo(sourceMessages) &&
+    !hasUserProvidedContactInfo(sourceMessages)
+  );
+}
 
 function uniqueStrings(items: string[]) {
   return Array.from(new Set(items.filter((item) => item && item.trim() !== "")));
@@ -67,6 +144,7 @@ function uniqueStrings(items: string[]) {
 
 function isFixedSuggestion(question: string) {
   const normalized = normalizeText(question);
+
   return FIXED_SUGGESTIONS.some(
     (item) => normalizeText(item) === normalized
   );
@@ -284,19 +362,19 @@ function renderMessageText(text?: string) {
     if (/^https?:\/\/[^\s]+$/.test(part)) {
       return (
         <a
-  key={index}
-  href={part}
-  target="_blank"
-  rel="noopener noreferrer"
-  style={{
-    color: "#1677ff",
-    textDecoration: "underline",
-    fontWeight: 400,
-  }}
-  className="break-all hover:opacity-80"
->
-  {part}
-</a>
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: "#1677ff",
+            textDecoration: "underline",
+            fontWeight: 400,
+          }}
+          className="break-all hover:opacity-80"
+        >
+          {part}
+        </a>
       );
     }
 
@@ -306,8 +384,6 @@ function renderMessageText(text?: string) {
 
 export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   const pathname = usePathname();
-
- 
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -444,6 +520,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
     const list = getConversationListForSession(sessionKey).sort(
       (a, b) => b.updatedAt - a.updatedAt
     );
+
     setConversations(list);
     return list;
   };
@@ -455,12 +532,12 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       setCurrentConversationId(conversationId);
 
       if (oldMessages.length > 0) {
-       const mappedMessages = oldMessages.map((msg, index) => ({
-  id: index + 1,
-  role: msg.role,
-  text: msg.message,
-  images: msg.images || [],
-})) as Message[];
+        const mappedMessages = oldMessages.map((msg, index) => ({
+          id: index + 1,
+          role: msg.role,
+          text: msg.message,
+          images: msg.images || [],
+        })) as Message[];
 
         setMessages(mappedMessages);
 
@@ -516,14 +593,14 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
     setSuggestedQuestions(buildSuggestedQuestions(null, []));
 
     try {
-await saveMessageToFirebase({
-  sessionId: newConversation.id,
-  name: "anonymous",
-  sessionKey,
-  role: "bot",
-  message: defaultBotMessage.text || "",
-  images: [],
-});
+      await saveMessageToFirebase({
+        sessionId: newConversation.id,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: defaultBotMessage.text || "",
+        images: [],
+      });
     } catch (error) {
       console.error("Lỗi khi tạo conversation mới:", error);
     }
@@ -607,6 +684,7 @@ await saveMessageToFirebase({
 
     const conversationId = await ensureConversationReady();
     if (!conversationId) return;
+
     await saveMessageToFirebase({
       sessionId: conversationId,
       name: "anonymous",
@@ -635,7 +713,22 @@ await saveMessageToFirebase({
         images,
       };
 
-      setMessages((prev) => [...prev, botMessage]);
+      const shouldAskContact = shouldAskContactInfo([
+        ...messages,
+        nextUserMessage,
+      ]);
+
+      const askContactMessage: Message = {
+        id: messages.length + 3,
+        role: "bot",
+        text: ASK_CONTACT_INFO_REPLY,
+      };
+
+      const nextBotMessages = shouldAskContact
+        ? [botMessage, askContactMessage]
+        : [botMessage];
+
+      setMessages((prev) => [...prev, ...nextBotMessages]);
 
       await saveMessageToFirebase({
         sessionId: conversationId,
@@ -646,16 +739,32 @@ await saveMessageToFirebase({
         images: images || [],
       });
 
+      if (shouldAskContact) {
+        await saveMessageToFirebase({
+          sessionId: conversationId,
+          name: "anonymous",
+          sessionKey,
+          role: "bot",
+          message: ASK_CONTACT_INFO_REPLY,
+          images: [],
+        });
+      }
+
       updateConversationMeta(conversationId, (item) => ({
         ...item,
         updatedAt: Date.now(),
       }));
 
-      const nextSourceMessages: Message[] = [...messages, nextUserMessage, botMessage];
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        ...nextBotMessages,
+      ];
 
       setSuggestedQuestions(
         buildSuggestedQuestions(question, nextSourceMessages)
       );
+
       setIsTyping(false);
       setStep("chat");
       setShowSuggestions(true);
@@ -704,7 +813,11 @@ await saveMessageToFirebase({
 
     setMessages((prev) => [...prev, nextUserMessage, nextBotMessage]);
 
-    const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
+    const nextSourceMessages: Message[] = [
+      ...messages,
+      nextUserMessage,
+      nextBotMessage,
+    ];
 
     setStep("chat");
     setShowSuggestions(true);
@@ -762,7 +875,11 @@ await saveMessageToFirebase({
 
       setMessages((prev) => [...prev, nextUserMessage, nextBotMessage]);
 
-      const nextSourceMessages: Message[] = [...messages, nextUserMessage, nextBotMessage];
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        nextBotMessage,
+      ];
 
       setStep("chat");
       setSuggestedQuestions(
@@ -792,244 +909,341 @@ await saveMessageToFirebase({
       matchedFaq?.answer ||
       "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
 
-   const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
+    const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
 
     await fakeBotReply(question, answerText, answerImages);
   };
 
   const handleSendCustomMessage = async () => {
-  const value = chatInput.trim();
-  if (!value || isTyping) return;
+    const value = chatInput.trim();
+    if (!value || isTyping) return;
 
-  const sessionKey = getOrCreateChatSessionId();
-  if (!sessionKey) return;
+    const detectedCustomerName = extractCustomerNameFromText(value);
+    const senderName = detectedCustomerName || "anonymous";
 
-  const conversationId = await ensureConversationReady();
-  if (!conversationId) return;
+    const sessionKey = getOrCreateChatSessionId();
+    if (!sessionKey) return;
 
-  await saveMessageToFirebase({
-    sessionId: conversationId,
-    name: "anonymous",
-    sessionKey,
-    role: "user",
-    message: value,
-  });
-
-  maybePromoteConversationTitle(conversationId, value);
-
-  const nextUserMessage: Message = {
-    id: messages.length + 1,
-    role: "user",
-    text: value,
-  };
-
-  setMessages((prev) => [...prev, nextUserMessage]);
-  setChatInput("");
-  setIsTyping(true);
-  setShowSuggestions(true);
-
-  if (hasEmailOrPhone(value)) {
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name: "anonymous",
-      sessionKey,
-      role: "bot",
-      message: CONTACT_RECEIVED_REPLY,
-      images: [],
-    });
-
-    updateConversationMeta(conversationId, (item) => ({
-      ...item,
-      updatedAt: Date.now(),
-    }));
-
-    const nextBotMessage: Message = {
-      id: messages.length + 2,
-      role: "bot",
-      text: CONTACT_RECEIVED_REPLY,
-    };
-
-    setMessages((prev) => [...prev, nextBotMessage]);
-
-    const nextSourceMessages: Message[] = [
-      ...messages,
-      nextUserMessage,
-      nextBotMessage,
-    ];
-
-    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
-    setStep("chat");
-    setShowSuggestions(true);
-    setIsTyping(false);
-
-    return;
-  }
-
-  const matchedFaq = getFaqItemByQuestion(value);
-  const predefinedAnswer = answerMap[value];
-
-  if (matchedFaq || predefinedAnswer) {
-    const answerText =
-      predefinedAnswer?.text ||
-      matchedFaq?.answer ||
-      "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
-
-    const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
+    const conversationId = await ensureConversationReady();
+    if (!conversationId) return;
 
     await saveMessageToFirebase({
       sessionId: conversationId,
-      name: "anonymous",
+      name: senderName,
       sessionKey,
-      role: "bot",
-      message: answerText,
-      images: answerImages,
+      role: "user",
+      message: value,
     });
 
-    updateConversationMeta(conversationId, (item) => ({
-      ...item,
-      updatedAt: Date.now(),
-    }));
+    maybePromoteConversationTitle(conversationId, value);
 
-    const nextBotMessage: Message = {
-      id: messages.length + 2,
-      role: "bot",
-      text: answerText,
-      images: answerImages,
+    const nextUserMessage: Message = {
+      id: messages.length + 1,
+      role: "user",
+      text: value,
     };
 
-    setMessages((prev) => [...prev, nextBotMessage]);
-
-    const nextSourceMessages: Message[] = [
-      ...messages,
-      nextUserMessage,
-      nextBotMessage,
-    ];
-
-    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
-    setStep("chat");
-    setShowSuggestions(true);
-    setIsTyping(false);
-
-    return;
-  }
-
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message: value }),
-    });
-
-    const data = await res.json();
-    const botAnswer =
-      data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
-
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name: "anonymous",
-      sessionKey,
-      role: "bot",
-      message: botAnswer,
-      images: [],
-    });
-
-    updateConversationMeta(conversationId, (item) => ({
-      ...item,
-      updatedAt: Date.now(),
-    }));
-
-    const nextBotMessage: Message = {
-      id: messages.length + 2,
-      role: "bot",
-      text: botAnswer,
-    };
-
-    setMessages((prev) => [...prev, nextBotMessage]);
-
-    const nextSourceMessages: Message[] = [
-      ...messages,
-      nextUserMessage,
-      nextBotMessage,
-    ];
-
-    const backendSuggestions = Array.isArray(data?.suggestions)
-      ? data.suggestions.filter(
-          (item: unknown): item is string =>
-            typeof item === "string" && item.trim().length > 0
-        )
-      : [];
-
-    const localSuggestions = buildDynamicSuggestionsFromFaq(
-      value,
-      nextSourceMessages
-    );
-
-    const mergedDynamicSuggestions = uniqueStrings([
-      ...backendSuggestions,
-      ...localSuggestions,
-    ]).slice(0, 8);
-
-    const userQuestionCount = getUserQuestionCount(nextSourceMessages);
-    const orderedFixed =
-      userQuestionCount >= 10
-        ? [REGISTER_QUESTION, GUIDE_QUESTION]
-        : [GUIDE_QUESTION, REGISTER_QUESTION];
-
-    const finalSuggestions = uniqueStrings([
-      ...mergedDynamicSuggestions,
-      ...orderedFixed,
-    ]);
-
-    setSuggestedQuestions(finalSuggestions);
-    setStep("chat");
+    setMessages((prev) => [...prev, nextUserMessage]);
+    setChatInput("");
+    setIsTyping(true);
     setShowSuggestions(true);
 
-    if (data.action === "open_trial_form") {
-      goToRegisterDemo();
+    if (detectedCustomerName && !hasEmailOrPhone(value)) {
+      const nameReply = getNameReceivedReply(detectedCustomerName);
+
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: nameReply,
+      };
+
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: nameReply,
+        images: [],
+      });
+
+      updateConversationMeta(conversationId, (item) => ({
+        ...item,
+        updatedAt: Date.now(),
+      }));
+
+      setMessages((prev) => [...prev, nextBotMessage]);
+
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        nextBotMessage,
+      ];
+
+      setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+      setStep("chat");
+      setShowSuggestions(true);
+      setIsTyping(false);
+
       return;
     }
-  } catch (error) {
-    console.error("Lỗi khi gọi API chat:", error);
 
-    const errorText =
-      "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
+    if (hasEmailOrPhone(value)) {
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: CONTACT_RECEIVED_REPLY,
+      };
 
-    await saveMessageToFirebase({
-      sessionId: conversationId,
-      name: "anonymous",
-      sessionKey,
-      role: "bot",
-      message: errorText,
-    });
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: CONTACT_RECEIVED_REPLY,
+        images: [],
+      });
 
-    updateConversationMeta(conversationId, (item) => ({
-      ...item,
-      updatedAt: Date.now(),
-    }));
+      updateConversationMeta(conversationId, (item) => ({
+        ...item,
+        updatedAt: Date.now(),
+      }));
 
-    const nextBotMessage: Message = {
-      id: messages.length + 2,
-      role: "bot",
-      text: errorText,
-    };
+      setMessages((prev) => [...prev, nextBotMessage]);
 
-    setMessages((prev) => [...prev, nextBotMessage]);
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        nextBotMessage,
+      ];
 
-    const nextSourceMessages: Message[] = [
-      ...messages,
-      nextUserMessage,
-      nextBotMessage,
-    ];
+      setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+      setStep("chat");
+      setShowSuggestions(true);
+      setIsTyping(false);
 
-    setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
-    setStep("chat");
-    setShowSuggestions(true);
-  } finally {
-    setIsTyping(false);
-  }
-};
+      return;
+    }
+
+    const matchedFaq = getFaqItemByQuestion(value);
+    const predefinedAnswer = answerMap[value];
+
+    if (matchedFaq || predefinedAnswer) {
+      const answerText =
+        predefinedAnswer?.text ||
+        matchedFaq?.answer ||
+        "Xin chào, bạn vui lòng chọn các câu hỏi có sẵn bên dưới để được hỗ trợ.";
+
+      const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
+
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: answerText,
+        images: answerImages,
+      };
+
+      const shouldAskContact = shouldAskContactInfo([
+        ...messages,
+        nextUserMessage,
+      ]);
+
+      const askContactMessage: Message = {
+        id: messages.length + 3,
+        role: "bot",
+        text: ASK_CONTACT_INFO_REPLY,
+      };
+
+      const nextBotMessages = shouldAskContact
+        ? [nextBotMessage, askContactMessage]
+        : [nextBotMessage];
+
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: answerText,
+        images: answerImages,
+      });
+
+      if (shouldAskContact) {
+        await saveMessageToFirebase({
+          sessionId: conversationId,
+          name: "anonymous",
+          sessionKey,
+          role: "bot",
+          message: ASK_CONTACT_INFO_REPLY,
+          images: [],
+        });
+      }
+
+      updateConversationMeta(conversationId, (item) => ({
+        ...item,
+        updatedAt: Date.now(),
+      }));
+
+      setMessages((prev) => [...prev, ...nextBotMessages]);
+
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        ...nextBotMessages,
+      ];
+
+      setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+      setStep("chat");
+      setShowSuggestions(true);
+      setIsTyping(false);
+
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: value }),
+      });
+
+      const data = await res.json();
+
+      const botAnswer =
+        data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
+
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: botAnswer,
+      };
+
+      const shouldAskContact = shouldAskContactInfo([
+        ...messages,
+        nextUserMessage,
+      ]);
+
+      const askContactMessage: Message = {
+        id: messages.length + 3,
+        role: "bot",
+        text: ASK_CONTACT_INFO_REPLY,
+      };
+
+      const nextBotMessages = shouldAskContact
+        ? [nextBotMessage, askContactMessage]
+        : [nextBotMessage];
+
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: botAnswer,
+        images: [],
+      });
+
+      if (shouldAskContact) {
+        await saveMessageToFirebase({
+          sessionId: conversationId,
+          name: "anonymous",
+          sessionKey,
+          role: "bot",
+          message: ASK_CONTACT_INFO_REPLY,
+          images: [],
+        });
+      }
+
+      updateConversationMeta(conversationId, (item) => ({
+        ...item,
+        updatedAt: Date.now(),
+      }));
+
+      setMessages((prev) => [...prev, ...nextBotMessages]);
+
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        ...nextBotMessages,
+      ];
+
+      const backendSuggestions = Array.isArray(data?.suggestions)
+        ? data.suggestions.filter(
+            (item: unknown): item is string =>
+              typeof item === "string" && item.trim().length > 0
+          )
+        : [];
+
+      const localSuggestions = buildDynamicSuggestionsFromFaq(
+        value,
+        nextSourceMessages
+      );
+
+      const mergedDynamicSuggestions = uniqueStrings([
+        ...backendSuggestions,
+        ...localSuggestions,
+      ]).slice(0, 8);
+
+      const userQuestionCount = getUserQuestionCount(nextSourceMessages);
+
+      const orderedFixed =
+        userQuestionCount >= 10
+          ? [REGISTER_QUESTION, GUIDE_QUESTION]
+          : [GUIDE_QUESTION, REGISTER_QUESTION];
+
+      const finalSuggestions = uniqueStrings([
+        ...mergedDynamicSuggestions,
+        ...orderedFixed,
+      ]);
+
+      setSuggestedQuestions(finalSuggestions);
+      setStep("chat");
+      setShowSuggestions(true);
+
+      if (data.action === "open_trial_form") {
+        goToRegisterDemo();
+        return;
+      }
+    } catch (error) {
+      console.error("Lỗi khi gọi API chat:", error);
+
+      const errorText =
+        "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
+
+      const nextBotMessage: Message = {
+        id: messages.length + 2,
+        role: "bot",
+        text: errorText,
+      };
+
+      await saveMessageToFirebase({
+        sessionId: conversationId,
+        name: "anonymous",
+        sessionKey,
+        role: "bot",
+        message: errorText,
+        images: [],
+      });
+
+      updateConversationMeta(conversationId, (item) => ({
+        ...item,
+        updatedAt: Date.now(),
+      }));
+
+      setMessages((prev) => [...prev, nextBotMessage]);
+
+      const nextSourceMessages: Message[] = [
+        ...messages,
+        nextUserMessage,
+        nextBotMessage,
+      ];
+
+      setSuggestedQuestions(buildSuggestedQuestions(value, nextSourceMessages));
+      setStep("chat");
+      setShowSuggestions(true);
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
   if (!open && !isPageMode) {
     if (isEmbedMode) return null;
@@ -1100,16 +1314,17 @@ await saveMessageToFirebase({
         >
           <div className="relative z-10 flex items-center justify-between px-4 pb-2 pt-2">
             <div className="flex items-center gap-2">
-             <img
-  src="/trangchu/chatbox.jpg"
-  alt="avatar"
-  className="h-8 w-8 rounded-full object-cover"
-/>
               <img
-  src="/trangchu/logo.png"
-  alt="Nhanh Travel"
-  className="h-5 w-auto object-contain"
-/>
+                src="/trangchu/chatbox.jpg"
+                alt="avatar"
+                className="h-8 w-8 rounded-full object-cover"
+              />
+
+              <img
+                src="/trangchu/logo.png"
+                alt="Nhanh Travel"
+                className="h-5 w-auto object-contain"
+              />
             </div>
 
             <div className="flex items-center gap-2">
@@ -1208,34 +1423,34 @@ await saveMessageToFirebase({
                                 </div>
                               )}
 
-                             {(() => {
-  const images = msg.images || [];
+                              {(() => {
+                                const images = msg.images || [];
 
-  if (images.length === 0) return null;
+                                if (images.length === 0) return null;
 
-  return (
-    <div className="mt-3 grid grid-cols-2 gap-2">
-      {images.map((img, index) => (
-        <button
-          key={index}
-          type="button"
-          onClick={() => {
-            setPreviewImages(images);
-            setPreviewIndex(index);
-            setPreviewImage(img);
-          }}
-          className="cursor-pointer overflow-hidden rounded-[12px] border border-[#e5e7eb] bg-white"
-        >
-          <img
-            src={img}
-            alt={`Giao diện ${index + 1}`}
-            className="h-[80px] w-full object-cover"
-          />
-        </button>
-      ))}
-    </div>
-  );
-})()}
+                                return (
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    {images.map((img, index) => (
+                                      <button
+                                        key={index}
+                                        type="button"
+                                        onClick={() => {
+                                          setPreviewImages(images);
+                                          setPreviewIndex(index);
+                                          setPreviewImage(img);
+                                        }}
+                                        className="cursor-pointer overflow-hidden rounded-[12px] border border-[#e5e7eb] bg-white"
+                                      >
+                                        <img
+                                          src={img}
+                                          alt={`Giao diện ${index + 1}`}
+                                          className="h-[80px] w-full object-cover"
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -1298,63 +1513,67 @@ await saveMessageToFirebase({
         </div>
       </div>
 
-     {previewImage && (
-  <div
-    className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4"
-    onClick={() => setPreviewImage(null)}
-  >
-    <div
-      className="relative max-h-[90vh] w-full max-w-[900px]"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button
-        type="button"
-        onClick={() => setPreviewImage(null)}
-        className="absolute right-2 top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/90 text-[20px] text-[#111827] shadow"
-      >
-        ×
-      </button>
-
-      {previewImages.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              const nextIndex =
-                previewIndex === 0 ? previewImages.length - 1 : previewIndex - 1;
-
-              setPreviewIndex(nextIndex);
-              setPreviewImage(previewImages[nextIndex]);
-            }}
-            className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-[900px]"
+            onClick={(e) => e.stopPropagation()}
           >
-            ‹
-          </button>
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute right-2 top-2 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/90 text-[20px] text-[#111827] shadow"
+            >
+              ×
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              const nextIndex =
-                previewIndex === previewImages.length - 1 ? 0 : previewIndex + 1;
+            {previewImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextIndex =
+                      previewIndex === 0
+                        ? previewImages.length - 1
+                        : previewIndex - 1;
 
-              setPreviewIndex(nextIndex);
-              setPreviewImage(previewImages[nextIndex]);
-            }}
-            className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
-          >
-            ›
-          </button>
-        </>
+                    setPreviewIndex(nextIndex);
+                    setPreviewImage(previewImages[nextIndex]);
+                  }}
+                  className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
+                >
+                  ‹
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextIndex =
+                      previewIndex === previewImages.length - 1
+                        ? 0
+                        : previewIndex + 1;
+
+                    setPreviewIndex(nextIndex);
+                    setPreviewImage(previewImages[nextIndex]);
+                  }}
+                  className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-[28px] text-white"
+                >
+                  ›
+                </button>
+              </>
+            )}
+
+            <img
+              src={previewImage}
+              alt="Xem ảnh lớn"
+              className="max-h-[90vh] w-full rounded-[16px] object-contain"
+            />
+          </div>
+        </div>
       )}
-
-      <img
-        src={previewImage}
-        alt="Xem ảnh lớn"
-        className="max-h-[90vh] w-full rounded-[16px] object-contain"
-      />
-    </div>
-  </div>
-)}
     </>
   );
 }
@@ -1392,7 +1611,7 @@ function QuestionGrid({
       transition hover:scale-[1.04] hover:border-[#0ea5e9] hover:shadow-[0_6px_16px_rgba(14,116,255,0.25)]
     `
                   : isGuide
-                  ? `
+                    ? `
       cursor-pointer whitespace-nowrap rounded-[14px]
       border-2 border-[#7c3aed]
       bg-[linear-gradient(135deg,#f5f3ff,#ede9fe)]
@@ -1401,7 +1620,7 @@ function QuestionGrid({
       shadow-[0_4px_12px_rgba(124,58,237,0.16)]
       transition hover:scale-[1.04] hover:border-[#6d28d9] hover:shadow-[0_6px_16px_rgba(124,58,237,0.22)]
     `
-                  : `
+                    : `
       cursor-pointer whitespace-nowrap rounded-[14px] border border-[#a8dbff] bg-white
       px-3 py-[7px] text-[11px] font-medium leading-[16px] text-[#2e3137]
       transition hover:scale-[1.02] hover:border-[#bfdcff] hover:bg-[#f6fbff]

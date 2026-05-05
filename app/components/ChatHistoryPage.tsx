@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { limitToLast, onValue, query, ref } from "firebase/database";
 import { db } from "../../src/lib/firebase";
 
@@ -67,6 +67,19 @@ function normalizeRole(role?: string): "USER" | "BOT" | "STAFF" {
   return "BOT";
 }
 
+function isAnonymousName(name?: string) {
+  const value = String(name || "").trim().toLowerCase();
+
+  return (
+    !value ||
+    value === "anonymous" ||
+    value === "khách hàng" ||
+    value === "khach hang" ||
+    value === "chưa xác định" ||
+    value === "chua xac dinh"
+  );
+}
+
 function normalizeMessages(
   messages?: Record<string, FirebaseMessage>
 ): ChatMessage[] {
@@ -85,24 +98,76 @@ function normalizeMessages(
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
+function extractCustomerNameFromMessage(text?: string) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+
+  if (!value) return "";
+
+  const patterns = [
+    /(?:tên\s+là|tên\s+mình\s+là|mình\s+tên\s+là|em\s+tên\s+là|tên\s+em\s+là|anh\s+tên\s+là|chị\s+tên\s+là|tôi\s+tên\s+là|họ\s+tên|họ\s+và\s+tên)\s*[:\-]?\s*([A-Za-zÀ-ỹ\s]{2,80})/i,
+    /(?:mình\s+là|em\s+là|tôi\s+là|anh\s+là|chị\s+là)\s+([A-Za-zÀ-ỹ\s]{2,80})/i,
+    /(?:chào|dạ chào|xin chào)\s+(?:chị|anh)?\s*([A-ZÀ-Ỹ][A-Za-zÀ-ỹ]+(?:\s+[A-ZÀ-Ỹ][A-Za-zÀ-ỹ]+){1,5})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+
+    if (match?.[1]) {
+      const name = match[1]
+        .replace(
+          /(?:số điện thoại|sdt|sđt|phone|email|gmail|zalo|chị|anh|em|ạ|ơi|có|cần|quan tâm|muốn|test).*$/i,
+          ""
+        )
+        .replace(/[,.!:;|\-]+$/g, "")
+        .trim();
+
+      if (name.split(/\s+/).length >= 2) {
+        return name;
+      }
+    }
+  }
+
+  return "";
+}
+
 function normalizeConversation(
   id: string,
   data: FirebaseConversation
 ): ChatConversation {
   const messages = normalizeMessages(data.messages);
 
-  const firstMessage = messages[0];
-  const lastMessage = messages[messages.length - 1];
-  const firstUserMessage = messages.find((item) => item.role === "USER");
+ const firstMessage = messages[0];
+const lastMessage = messages[messages.length - 1];
+const firstUserMessage = messages.find((item) => item.role === "USER");
+
+const extractedNameFromUserMessage =
+  messages
+    .filter((item) => item.role === "USER")
+    .map((item) => extractCustomerNameFromMessage(item.message))
+    .find((name) => name && !isAnonymousName(name)) || "";
+
+const firstNamedUserMessage = messages.find(
+  (item) =>
+    item.role === "USER" &&
+    item.name &&
+    !isAnonymousName(item.name)
+);
+
+const extractedNameFromMessage =
+  messages
+    .map((item) => extractCustomerNameFromMessage(item.message))
+    .find((name) => name && !isAnonymousName(name)) || "";
 
   return {
     id,
-    customerName:
-      data.customerName ||
-      data.name ||
-      firstUserMessage?.name ||
-      firstMessage?.name ||
-      "Khách hàng",
+  customerName:
+  extractedNameFromUserMessage ||
+  firstNamedUserMessage?.name ||
+  (!isAnonymousName(data.customerName) ? data.customerName : "") ||
+  (!isAnonymousName(data.name) ? data.name : "") ||
+  firstUserMessage?.name ||
+  firstMessage?.name ||
+  "Khách hàng",
     customerPhone: data.customerPhone || data.phone || "",
     customerEmail: data.customerEmail || data.email || "",
     sessionKey:
@@ -123,6 +188,18 @@ function normalizeConversation(
 function formatDate(value: number) {
   if (!value) return "Không rõ thời gian";
   return new Date(value).toLocaleString("vi-VN");
+}
+
+function getDisplayCustomerName(conversation: ChatConversation, index?: number) {
+  if (!isAnonymousName(conversation.customerName)) {
+    return conversation.customerName;
+  }
+
+  if (typeof index === "number") {
+    return `Ẩn danh (${index + 1})`;
+  }
+
+  return "Ẩn danh";
 }
 
 function getLastMessage(conversation: ChatConversation) {
@@ -165,10 +242,21 @@ function getUnreadUserCount(
 
 function getInitials(name: string) {
   const cleanName = name.trim();
+  const lowerName = cleanName.toLowerCase();
 
-  if (!cleanName || cleanName.toLowerCase() === "anonymous") return "KH";
+  if (
+    !cleanName ||
+    lowerName === "anonymous" ||
+    lowerName.startsWith("ẩn danh")
+  ) {
+    return "KH";
+  }
 
-  const words = cleanName.split(/\s+/);
+  const words = cleanName
+    .split(/\s+/)
+    .filter((word) => !/^\(\d+\)$/.test(word));
+
+  if (words.length === 0) return "KH";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
 
   return `${words[0][0] || ""}${words[words.length - 1][0] || ""}`.toUpperCase();
@@ -209,6 +297,51 @@ function MessageIcon() {
       />
     </svg>
   );
+}
+function normalizePhone(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function messageMatchesContactTarget(
+  message: ChatMessage,
+  phone: string,
+  email: string
+) {
+  const text = message.message.toLowerCase();
+  const messagePhone = normalizePhone(message.message);
+  const targetPhone = normalizePhone(phone);
+  const targetEmail = email.toLowerCase().trim();
+
+  return Boolean(
+    (targetEmail && text.includes(targetEmail)) ||
+      (targetPhone && messagePhone.includes(targetPhone))
+  );
+}
+function highlightContactTarget(text: string, phone: string, email: string) {
+  const targets = [email, phone].filter(Boolean);
+
+  if (targets.length === 0) return text;
+
+  const escapedTargets = targets.map((item) =>
+    item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  );
+
+  const regex = new RegExp(`(${escapedTargets.join("|")})`, "gi");
+  const parts = text.split(regex);
+
+  return parts.map((part, index) => {
+    const isTarget = targets.some(
+      (target) => target.toLowerCase() === part.toLowerCase()
+    );
+
+    if (!isTarget) return part;
+
+    return (
+      <mark key={`${part}-${index}`} style={styles.highlightText}>
+        {part}
+      </mark>
+    );
+  });
 }
 
 function UserIcon() {
@@ -272,6 +405,9 @@ export default function ChatHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [readStateMap, setReadStateMap] = useState<ReadStateMap>({});
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [highlightPhone, setHighlightPhone] = useState("");
+const [highlightEmail, setHighlightEmail] = useState("");
 
   useEffect(() => {
     try {
@@ -320,6 +456,65 @@ export default function ChatHistoryPage() {
       null
     );
   }, [filteredConversations, selectedId]);
+useEffect(() => {
+  if (!selectedConversation) return;
+
+  let shouldScroll = false;
+  let phone = "";
+  let email = "";
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    shouldScroll = params.get("scrollToContact") === "1";
+
+    phone = localStorage.getItem("nhanh_travel_scroll_contact_phone") || "";
+    email = localStorage.getItem("nhanh_travel_scroll_contact_email") || "";
+    setHighlightPhone(phone);
+setHighlightEmail(email);
+  } catch (error) {
+    console.error("READ_SCROLL_CONTACT_ERROR", error);
+  }
+
+  if (!shouldScroll) return;
+  if (!phone && !email) return;
+
+  const targetMessage = selectedConversation.messages.find((message) =>
+    messageMatchesContactTarget(message, phone, email)
+  );
+
+  if (!targetMessage) return;
+
+  const timer = window.setTimeout(() => {
+    messageRefs.current[targetMessage.id]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, 500);
+
+  return () => window.clearTimeout(timer);
+}, [selectedConversation]);
+  
+
+  const anonymousIndexMap = useMemo(() => {
+  const map = new Map<string, number>();
+  let count = 1;
+
+  const anonymousConversations = [...conversations]
+    .filter((conversation) => isAnonymousName(conversation.customerName))
+    .sort((a, b) => {
+      const timeA = a.createdAt || a.updatedAt || 0;
+      const timeB = b.createdAt || b.updatedAt || 0;
+
+      return timeA - timeB;
+    });
+
+  anonymousConversations.forEach((conversation) => {
+    map.set(conversation.id, count);
+    count += 1;
+  });
+
+  return map;
+}, [conversations]);
 
   useEffect(() => {
     setLoading(true);
@@ -342,9 +537,28 @@ export default function ChatHistoryPage() {
         setConversations(nextConversations);
 
         setSelectedId((current) => {
-          if (current) return current;
-          return nextConversations[0]?.id || "";
-        });
+  let targetId = "";
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    targetId =
+      params.get("conversationId") ||
+      localStorage.getItem("nhanh_travel_selected_chat_id") ||
+      "";
+  } catch (error) {
+    console.error("READ_SELECTED_CHAT_ERROR", error);
+  }
+
+  if (targetId && nextConversations.some((item) => item.id === targetId)) {
+    return targetId;
+  }
+
+  if (current && nextConversations.some((item) => item.id === current)) {
+    return current;
+  }
+
+  return nextConversations[0]?.id || "";
+});
 
         setLoading(false);
       },
@@ -423,7 +637,7 @@ export default function ChatHistoryPage() {
             ) : filteredConversations.length === 0 ? (
               <div style={styles.emptyBox}>Chưa có đoạn chat phù hợp.</div>
             ) : (
-              filteredConversations.map((conversation) => {
+              filteredConversations.map((conversation, index) => {
                 const active = selectedConversation?.id === conversation.id;
                 const hasUnread = hasNewCustomerMessage(
                   conversation,
@@ -432,6 +646,13 @@ export default function ChatHistoryPage() {
                 const unreadCount = getUnreadUserCount(
                   conversation,
                   readStateMap
+                );
+
+                const displayIndex =
+                  (anonymousIndexMap.get(conversation.id) || index + 1) - 1;
+                const displayName = getDisplayCustomerName(
+                  conversation,
+                  displayIndex
                 );
 
                 return (
@@ -445,18 +666,14 @@ export default function ChatHistoryPage() {
                     }}
                   >
                     <div style={styles.avatarWrap}>
-                      <div style={styles.avatar}>
-                        {getInitials(conversation.customerName)}
-                      </div>
+                      <div style={styles.avatar}>{getInitials(displayName)}</div>
 
                       {hasUnread ? <span style={styles.unreadDot} /> : null}
                     </div>
 
                     <div style={styles.sessionContent}>
                       <div style={styles.sessionTop}>
-                        <div style={styles.sessionName}>
-                          {conversation.customerName || "Khách hàng"}
-                        </div>
+                        <div style={styles.sessionName}>{displayName}</div>
 
                         {hasUnread ? (
                           <span style={styles.newBadge}>
@@ -545,50 +762,49 @@ export default function ChatHistoryPage() {
 
                   return (
                     <div
-                      key={message.id}
-                      style={{
-                        ...styles.messageRow,
-                        justifyContent: isUser ? "flex-start" : "flex-end",
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...styles.messageGroup,
-                          alignItems: isUser ? "flex-start" : "flex-end",
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.messageBubble,
-                            ...(isUser
-                              ? styles.customerBubble
-                              : isBot
-                                ? styles.agentBubble
-                                : styles.staffBubble),
-                          }}
-                        >
-                          {message.message}
-                        </div>
+  key={message.id}
+  ref={(element) => {
+    messageRefs.current[message.id] = element;
+  }}
+  style={{
+    ...styles.messageRow,
+    justifyContent: isUser ? "flex-start" : "flex-end",
+  }}
+>
+  <div
+    style={{
+      ...styles.messageGroup,
+      alignItems: isUser ? "flex-start" : "flex-end",
+    }}
+  >
+    <div
+      style={{
+        ...styles.messageBubble,
+        ...(isUser
+          ? styles.customerBubble
+          : isBot
+            ? styles.agentBubble
+            : styles.staffBubble),
+      }}
+    >
+      {highlightContactTarget(message.message, highlightPhone, highlightEmail)}
+    </div>
 
-                        <div style={styles.messageMeta}>
-                          <span style={styles.inlineIcon}>
-                            {isUser ? (
-                              <UserIcon />
-                            ) : isBot ? (
-                              <BotIcon />
-                            ) : (
-                              <MessageIcon />
-                            )}
-                          </span>
-                          {isUser
-                            ? "Khách hàng"
-                            : isBot
-                              ? "Trợ lý AI"
-                              : "Nhân viên"}{" "}
-                          · {formatDate(message.createdAt)}
-                        </div>
-                      </div>
-                    </div>
+    <div style={styles.messageMeta}>
+      <span style={styles.inlineIcon}>
+        {isUser ? (
+          <UserIcon />
+        ) : isBot ? (
+          <BotIcon />
+        ) : (
+          <MessageIcon />
+        )}
+      </span>
+      {isUser ? "Khách hàng" : isBot ? "Trợ lý AI" : "Nhân viên"} ·{" "}
+      {formatDate(message.createdAt)}
+    </div>
+  </div>
+</div>
                   );
                 })}
               </div>
@@ -647,6 +863,13 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     color: "#0f172a",
   },
+  highlightText: {
+  background: "#fff1c2",
+  color: "#78350f",
+  padding: "0 4px",
+  borderRadius: "4px",
+  fontWeight: 800,
+},
 
   logoSub: {
     fontSize: "12px",
