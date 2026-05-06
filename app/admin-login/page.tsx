@@ -28,18 +28,26 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
+    event.preventDefault();
 
-  const cleanUsername = username.trim();
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
 
-  localStorage.setItem(ADMIN_ACCESS_KEY, "true");
-  localStorage.setItem(
-    ADMIN_USERNAME_KEY,
-    cleanUsername || "demo@nhanhtravel.com"
-  );
+    const matchedAccount = ADMIN_ACCOUNTS.find(
+      (account) =>
+        account.username === cleanUsername &&
+        account.password === cleanPassword
+    );
 
-  router.push("/chat-history");
-}
+    if (matchedAccount) {
+      localStorage.setItem(ADMIN_ACCESS_KEY, "true");
+      localStorage.setItem(ADMIN_USERNAME_KEY, matchedAccount.username);
+      router.push("/chat-history");
+      return;
+    }
+
+    setError("Tài khoản hoặc mật khẩu không đúng.");
+  }
 
   return (
     <main style={styles.page}>
