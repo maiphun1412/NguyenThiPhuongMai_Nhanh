@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { limitToLast, onValue, query, ref } from "firebase/database";
-import { db } from "../../src/lib/firebase";
+import { get, limitToLast, onValue, query, ref } from "firebase/database";
+import { realtimeDb } from "../../src/lib/firebase";
 
 type FirebaseMessage = {
   createdAt?: number | string;
@@ -23,6 +23,14 @@ type FirebaseConversation = {
   customerEmail?: string;
   sessionKey?: string;
   messages?: Record<string, FirebaseMessage>;
+};
+
+type FirebaseExtractedInfo = {
+  conversationId?: string;
+  customerName?: string;
+  phone?: string;
+  email?: string;
+  updatedAt?: number | string;
 };
 
 type ChatMessage = {
@@ -58,8 +66,6 @@ type ExportRow = {
   name: string;
   phone: string;
   email: string;
-  session: string;
-  conversation: string;
   updatedAt: string;
 };
 
@@ -69,6 +75,7 @@ type ActionMenu = {
 } | null;
 
 const CHAT_HISTORY_PATH = "nhanhtravel-website/maiphuong/chats";
+const EXTRACTED_INFO_PATH = "nhanhtravel-website/maiphuong/extracted-info";
 const IGNORED_COMPANY_PHONES = ["0909991205", "84909991205"];
 
 function toTime(value: unknown) {
@@ -174,9 +181,9 @@ function normalizeConversation(
   return {
     id,
     customerName:
+      data.customerName ||
       extractedNameFromUserMessage ||
       firstNamedUserMessage?.name ||
-      (!isAnonymousName(data.customerName) ? data.customerName || "" : "") ||
       (!isAnonymousName(data.name) ? data.name || "" : "") ||
       firstUserMessage?.name ||
       firstMessage?.name ||
@@ -246,7 +253,7 @@ function extractCustomerInfo(
   const extractedName =
     extractNameFromText(userText) || extractNameFromText(allText);
 
-  const name = extractedName || conversation.customerName || "Ẩn danh";
+  const name = conversation.customerName || extractedName || "Ẩn danh";
 
   const email =
     conversation.customerEmail ||
@@ -491,22 +498,58 @@ export default function ExtractedInfoPage() {
     setLoading(true);
     setLoadError("");
 
-    const conversationsRef = query(ref(db, CHAT_HISTORY_PATH), limitToLast(50));
+    const conversationsRef = query(
+      ref(realtimeDb, CHAT_HISTORY_PATH),
+      limitToLast(50)
+    );
 
     const unsubscribe = onValue(
       conversationsRef,
-      (snapshot) => {
-        const rawValue = snapshot.val() || {};
+      async (snapshot) => {
+        try {
+          const rawValue = snapshot.val() || {};
 
-        const nextConversations = Object.entries(rawValue)
-          .map(([id, value]) =>
-            normalizeConversation(id, value as FirebaseConversation)
-          )
-          .filter((item) => item.messages.length > 0)
-          .sort((a, b) => b.updatedAt - a.updatedAt);
+          const extractedSnapshot = await get(
+            ref(realtimeDb, EXTRACTED_INFO_PATH)
+          );
 
-        setConversations(nextConversations);
-        setLoading(false);
+          const extractedValue =
+            (extractedSnapshot.val() || {}) as Record<
+              string,
+              FirebaseExtractedInfo
+            >;
+
+          const nextConversations = Object.entries(rawValue)
+            .map(([id, value]) => {
+              const conversationData = value as FirebaseConversation;
+              const extractedInfo = extractedValue[id];
+
+              return normalizeConversation(id, {
+                ...conversationData,
+                customerName:
+                  extractedInfo?.customerName || conversationData.customerName,
+                customerPhone:
+                  extractedInfo?.phone || conversationData.customerPhone,
+                customerEmail:
+                  extractedInfo?.email || conversationData.customerEmail,
+                phone: extractedInfo?.phone || conversationData.phone,
+                email: extractedInfo?.email || conversationData.email,
+                updatedAt:
+                  extractedInfo?.updatedAt ||
+                  conversationData.updatedAt ||
+                  conversationData.createdAt,
+              });
+            })
+            .filter((item) => item.messages.length > 0)
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+
+          setConversations(nextConversations);
+          setLoading(false);
+        } catch (error) {
+          console.error("Firebase extracted info merge error:", error);
+          setLoadError("Không thể tải dữ liệu trích xuất từ Firebase.");
+          setLoading(false);
+        }
       },
       (error) => {
         console.error("Firebase extracted info error:", error);
@@ -530,22 +573,22 @@ export default function ExtractedInfoPage() {
     }
   }
 
- function handleViewChatDetail(
-  conversation: ChatConversation,
-  info: ExtractedCustomerInfo
-) {
-  try {
-    localStorage.setItem("nhanh_travel_selected_chat_id", conversation.id);
-    localStorage.setItem("nhanh_travel_scroll_contact_phone", info.phone || "");
-    localStorage.setItem("nhanh_travel_scroll_contact_email", info.email || "");
-  } catch (error) {
-    console.error("SAVE_SELECTED_CHAT_ERROR", error);
-  }
+  function handleViewChatDetail(
+    conversation: ChatConversation,
+    info: ExtractedCustomerInfo
+  ) {
+    try {
+      localStorage.setItem("nhanh_travel_selected_chat_id", conversation.id);
+      localStorage.setItem("nhanh_travel_scroll_contact_phone", info.phone || "");
+      localStorage.setItem("nhanh_travel_scroll_contact_email", info.email || "");
+    } catch (error) {
+      console.error("SAVE_SELECTED_CHAT_ERROR", error);
+    }
 
-  window.location.href = `/chat-history?conversationId=${encodeURIComponent(
-    conversation.id
-  )}&scrollToContact=1`;
-}
+    window.location.href = `/chat-history?conversationId=${encodeURIComponent(
+      conversation.id
+    )}&scrollToContact=1`;
+  }
 
   function handleCall(phone: string) {
     const phoneForAction = getPhoneForAction(phone);
@@ -558,7 +601,11 @@ export default function ExtractedInfoPage() {
     const phoneDigits = normalizePhone(phone);
     if (!phoneDigits) return;
 
-    window.open(`https://zalo.me/${phoneDigits}`, "_blank", "noopener,noreferrer");
+    window.open(
+      `https://zalo.me/${phoneDigits}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   function handleOpenGmail(email: string) {
@@ -583,17 +630,15 @@ export default function ExtractedInfoPage() {
     });
   }
 
-  function buildExportRows(): ExportRow[] {
-    return filteredItems.map(({ conversation, info }, index) => ({
-      stt: index + 1,
-      name: getDisplayExtractedName(conversation, info),
-      phone: info.phone || "",
-      email: info.email || "",
-      session: conversation.sessionKey || "",
-      conversation: conversation.id || "",
-      updatedAt: formatDate(conversation.updatedAt),
-    }));
-  }
+    function buildExportRows(): ExportRow[] {
+  return filteredItems.map(({ conversation, info }, index) => ({
+    stt: index + 1,
+    name: getDisplayExtractedName(conversation, info),
+    phone: info.phone || "",
+    email: info.email || "",
+    updatedAt: formatDate(conversation.updatedAt),
+  }));
+}
 
   function handleOpenExportPreview() {
     if (filteredItems.length === 0) {
@@ -613,24 +658,22 @@ export default function ExtractedInfoPage() {
     }
 
     const header = [
-      "STT",
-      "Họ và tên",
-      "Số điện thoại",
-      "Email",
-      "Session",
-      "Conversation",
-      "Ngày cập nhật",
-    ];
+  "STT",
+  "Họ và tên",
+  "Số điện thoại",
+  "Email",
+  "Session",
+  "Conversation",
+  "Ngày cập nhật",
+];
 
-    const body = rows.map((row) => [
-      row.stt,
-      row.name,
-      row.phone,
-      row.email,
-      row.session,
-      row.conversation,
-      row.updatedAt,
-    ]);
+   const body = rows.map((row) => [
+  row.stt,
+  row.name,
+  row.phone,
+  row.email,
+  row.updatedAt,
+]);
 
     const csv = [header, ...body]
       .map((row) => row.map((cell) => escapeCsvCell(cell)).join(","))
@@ -659,21 +702,19 @@ export default function ExtractedInfoPage() {
       return;
     }
 
-    const tableRows = rows
-      .map(
-        (row) => `
-          <tr>
-            <td>${row.stt}</td>
-            <td>${escapeHtml(row.name)}</td>
-            <td>${escapeHtml(row.phone || "Chưa có")}</td>
-            <td>${escapeHtml(row.email || "Chưa có")}</td>
-            <td>${escapeHtml(row.updatedAt)}</td>
-            <td>${escapeHtml(row.session)}</td>
-            <td>${escapeHtml(row.conversation)}</td>
-          </tr>
-        `
-      )
-      .join("");
+   const tableRows = rows
+  .map(
+    (row) => `
+      <tr>
+        <td>${row.stt}</td>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${escapeHtml(row.phone || "Chưa có")}</td>
+        <td>${escapeHtml(row.email || "Chưa có")}</td>
+        <td>${escapeHtml(row.updatedAt)}</td>
+      </tr>
+    `
+  )
+  .join("");
 
     const html = `
       <!doctype html>
@@ -758,17 +799,13 @@ export default function ExtractedInfoPage() {
           </div>
 
           <table>
-            <thead>
-              <tr>
-                <th style="width: 42px;">STT</th>
-                <th>Họ và tên</th>
-                <th>Số điện thoại</th>
-                <th>Email</th>
-                <th>Ngày cập nhật</th>
-                <th>Session</th>
-                <th>Conversation</th>
-              </tr>
-            </thead>
+            <tr>
+  <th style="width: 42px;">STT</th>
+  <th>Họ và tên</th>
+  <th>Số điện thoại</th>
+  <th>Email</th>
+  <th>Ngày cập nhật</th>
+</tr>
 
             <tbody>
               ${tableRows}
@@ -824,8 +861,6 @@ export default function ExtractedInfoPage() {
           </a>
         </nav>
 
-        
-
         <div style={styles.searchBox} onClick={(event) => event.stopPropagation()}>
           <SearchIcon />
           <input
@@ -840,29 +875,27 @@ export default function ExtractedInfoPage() {
       <main style={styles.main}>
         <section style={styles.crmCard}>
           <div style={styles.cardHeader}>
-  <div>
-    <div style={styles.cardTitle}>Danh sách thông tin trích xuất</div>
-    <div style={styles.cardSubtitle}>
-      {filteredItems.length} khách hàng có email hoặc số điện thoại
-    </div>
-  </div>
+            <div>
+              <div style={styles.cardTitle}>Danh sách thông tin trích xuất</div>
+              <div style={styles.cardSubtitle}>
+                {filteredItems.length} khách hàng có email hoặc số điện thoại
+              </div>
+            </div>
 
-  <div style={styles.cardHeaderActions}>
-   
-
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        handleOpenExportPreview();
-      }}
-      style={styles.exportButton}
-    >
-      <SaveIcon />
-      Xuất danh sách
-    </button>
-  </div>
-</div>
+            <div style={styles.cardHeaderActions}>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleOpenExportPreview();
+                }}
+                style={styles.exportButton}
+              >
+                <SaveIcon />
+                Xuất danh sách
+              </button>
+            </div>
+          </div>
 
           <div style={styles.tableWrap}>
             <table style={styles.crmTable}>
@@ -1035,15 +1068,15 @@ export default function ExtractedInfoPage() {
                           <span style={styles.sourceBadge}>Chatbot</span>
                         </td>
 
-                       <td style={styles.tableTd}>
-  <span style={styles.statusBadge}>
-    {info.phone && info.email
-      ? "SĐT + Email"
-      : info.phone
-        ? "Chỉ SĐT"
-        : "Chỉ Email"}
-  </span>
-</td>
+                        <td style={styles.tableTd}>
+                          <span style={styles.statusBadge}>
+                            {info.phone && info.email
+                              ? "SĐT + Email"
+                              : info.phone
+                                ? "Chỉ SĐT"
+                                : "Chỉ Email"}
+                          </span>
+                        </td>
 
                         <td style={styles.tableTd}>
                           <span style={styles.dateText}>
@@ -1065,39 +1098,45 @@ export default function ExtractedInfoPage() {
                             </button>
 
                             {moreMenuOpen ? (
-  <div
-    style={{
-      ...styles.actionMenu,
-      right: 0,
-      left: "auto",
-    }}
-    onClick={(event) => event.stopPropagation()}
-  >
-    <button
-      type="button"
-      style={styles.actionMenuItem}
-      onClick={() => handleViewChatDetail(conversation, info)}
-    >
-      Xem chi tiết đoạn chat
-    </button>
+                              <div
+                                style={{
+                                  ...styles.actionMenu,
+                                  right: 0,
+                                  left: "auto",
+                                }}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  style={styles.actionMenuItem}
+                                  onClick={() =>
+                                    handleViewChatDetail(conversation, info)
+                                  }
+                                >
+                                  Xem chi tiết đoạn chat
+                                </button>
 
-    <button
-      type="button"
-      style={styles.actionMenuItem}
-      onClick={() => handleCopy(conversation.id, "mã hội thoại")}
-    >
-      Copy mã hội thoại
-    </button>
+                                <button
+                                  type="button"
+                                  style={styles.actionMenuItem}
+                                  onClick={() =>
+                                    handleCopy(conversation.id, "mã hội thoại")
+                                  }
+                                >
+                                  Copy mã hội thoại
+                                </button>
 
-    <button
-      type="button"
-      style={styles.actionMenuItem}
-      onClick={() => handleCopy(conversation.sessionKey, "mã phiên")}
-    >
-      Copy mã phiên
-    </button>
-  </div>
-) : null}
+                                <button
+                                  type="button"
+                                  style={styles.actionMenuItem}
+                                  onClick={() =>
+                                    handleCopy(conversation.sessionKey, "mã phiên")
+                                  }
+                                >
+                                  Copy mã phiên
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -1153,28 +1192,24 @@ function ExportPreviewModal({
           <table style={styles.previewTable}>
             <thead>
               <tr>
-                <th style={styles.previewTh}>STT</th>
-                <th style={styles.previewTh}>Họ và tên</th>
-                <th style={styles.previewTh}>Số điện thoại</th>
-                <th style={styles.previewTh}>Email</th>
-                <th style={styles.previewTh}>Ngày cập nhật</th>
-                <th style={styles.previewTh}>Session</th>
-                <th style={styles.previewTh}>Conversation</th>
-              </tr>
+  <th style={styles.previewTh}>STT</th>
+  <th style={styles.previewTh}>Họ và tên</th>
+  <th style={styles.previewTh}>Số điện thoại</th>
+  <th style={styles.previewTh}>Email</th>
+  <th style={styles.previewTh}>Ngày cập nhật</th>
+</tr>
             </thead>
 
             <tbody>
               {rows.map((row) => (
-                <tr key={`${row.conversation}-${row.stt}`}>
-                  <td style={styles.previewTd}>{row.stt}</td>
-                  <td style={styles.previewTd}>{row.name}</td>
-                  <td style={styles.previewTd}>{row.phone || "Chưa có"}</td>
-                  <td style={styles.previewTd}>{row.email || "Chưa có"}</td>
-                  <td style={styles.previewTd}>{row.updatedAt}</td>
-                  <td style={styles.previewTd}>{row.session}</td>
-                  <td style={styles.previewTd}>{row.conversation}</td>
-                </tr>
-              ))}
+  <tr key={`${row.phone || row.email || row.name}-${row.stt}`}>
+    <td style={styles.previewTd}>{row.stt}</td>
+    <td style={styles.previewTd}>{row.name}</td>
+    <td style={styles.previewTd}>{row.phone || "Chưa có"}</td>
+    <td style={styles.previewTd}>{row.email || "Chưa có"}</td>
+    <td style={styles.previewTd}>{row.updatedAt}</td>
+  </tr>
+))}
             </tbody>
           </table>
         </div>
@@ -1335,12 +1370,13 @@ const styles: Record<string, CSSProperties> = {
     overflow: "visible",
     boxShadow: "0 16px 36px rgba(15, 23, 42, 0.05)",
   },
+
   cardHeaderActions: {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  flexShrink: 0,
-},
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    flexShrink: 0,
+  },
 
   cardHeader: {
     padding: "18px 20px",
@@ -1612,7 +1648,6 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
     fontFamily: '"Times New Roman", Times, serif',
   },
-  
 
   previewTableWrap: {
     overflow: "auto",

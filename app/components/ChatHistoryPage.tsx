@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { limitToLast, onValue, query, ref } from "firebase/database";
-import { db } from "../../src/lib/firebase";
+import { realtimeDb } from "../../src/lib/firebase";
 
 type FirebaseMessage = {
   createdAt?: number | string;
@@ -520,7 +520,10 @@ setHighlightEmail(email);
     setLoading(true);
     setLoadError("");
 
-    const conversationsRef = query(ref(db, CHAT_HISTORY_PATH), limitToLast(50));
+    const conversationsRef = query(
+  ref(realtimeDb, CHAT_HISTORY_PATH),
+  limitToLast(50)
+);
 
     const unsubscribe = onValue(
       conversationsRef,
@@ -863,13 +866,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     color: "#0f172a",
   },
-  highlightText: {
-  background: "#fff1c2",
-  color: "#78350f",
-  padding: "0 4px",
-  borderRadius: "4px",
-  fontWeight: 800,
-},
+  
 
   logoSub: {
     fontSize: "12px",

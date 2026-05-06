@@ -1,5 +1,5 @@
 import { get, push, ref, set } from "firebase/database";
-import { db } from "./firebase";
+import { realtimeDb } from "./firebase";
 
 export type FirebaseMessage = {
   id: string;
@@ -20,7 +20,9 @@ type SaveMessageParams = {
   images?: string[];
 };
 
-const BASE_PATH = "nhanhtravel-website/maiphuong/chats";
+const USER_ID = "maiphuong";
+
+const BASE_PATH = `nhanhtravel-website/${USER_ID}/chats`;
 
 export async function saveMessageToFirebase({
   sessionId,
@@ -30,7 +32,7 @@ export async function saveMessageToFirebase({
   message,
   images = [],
 }: SaveMessageParams) {
-  const messagesRef = ref(db, `${BASE_PATH}/${sessionId}/messages`);
+  const messagesRef = ref(realtimeDb, `${BASE_PATH}/${sessionId}/messages`);
   const newMessageRef = push(messagesRef);
 
   await set(newMessageRef, {
@@ -46,7 +48,7 @@ export async function saveMessageToFirebase({
 export async function getMessagesFromFirebase(
   sessionId: string
 ): Promise<FirebaseMessage[]> {
-  const messagesRef = ref(db, `${BASE_PATH}/${sessionId}/messages`);
+  const messagesRef = ref(realtimeDb, `${BASE_PATH}/${sessionId}/messages`);
   const snapshot = await get(messagesRef);
 
   if (!snapshot.exists()) return [];
@@ -78,7 +80,7 @@ type SaveTrialFormParams = {
   note: string;
 };
 
-const TRIAL_FORM_PATH = "nhanhtravel-website/maiphuong/trial-forms";
+const TRIAL_FORM_PATH = `nhanhtravel-website/${USER_ID}/trial-forms`;
 
 export async function saveTrialFormToFirebase({
   conversationId,
@@ -91,7 +93,7 @@ export async function saveTrialFormToFirebase({
   companySize,
   note,
 }: SaveTrialFormParams) {
-  const formRef = ref(db, TRIAL_FORM_PATH);
+  const formRef = ref(realtimeDb, TRIAL_FORM_PATH);
   const newRef = push(formRef);
 
   await set(newRef, {

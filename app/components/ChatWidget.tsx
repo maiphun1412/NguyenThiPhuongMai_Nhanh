@@ -7,6 +7,7 @@ import {
   getMessagesFromFirebase,
   saveMessageToFirebase,
 } from "../../src/lib/chatService";
+import { saveExtractedInfoFromMessage } from "../../src/lib/extracted-info";
 import {
   answerMap,
   defaultBotMessage,
@@ -38,6 +39,10 @@ type ChatWidgetProps = {
 
 const FIXED_SUGGESTIONS = [GUIDE_QUESTION, REGISTER_QUESTION];
 
+function createLocalMessageId(offset = 0) {
+  return Date.now() + offset;
+}
+
 function normalizeText(text?: string) {
   return (text || "")
     .toLowerCase()
@@ -61,7 +66,7 @@ function extractCustomerNameFromText(text: string) {
   const cleanedText = text.replace(/\s+/g, " ").trim();
 
   const patterns = [
-    /(?:tên mình là|mình tên là|em tên là|tên em là|anh tên là|chị tên là|tôi tên là|mình là|em là|tôi là)\s+([A-Za-zÀ-ỹ\s]{2,50})/i,
+    /(?:tên mình là|mình tên là|em tên là|tên em là|anh tên là|chị tên là|tôi tên là|tôi tên|em tên|anh tên|chị tên)\s+([A-Za-zÀ-ỹ\s]{2,50})/i,
     /(?:họ tên|họ và tên|hoten)\s*(?:là|:|-)?\s*([A-Za-zÀ-ỹ\s]{2,50})/i,
   ];
 
@@ -74,22 +79,6 @@ function extractCustomerNameFromText(text: string) {
         .replace(/[,:;-]+$/g, "")
         .trim();
     }
-  }
-
-  const parts = cleanedText
-    .split(/[-,|]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-  const firstPart = parts[0] || "";
-
-  const looksLikeName =
-    /^[A-Za-zÀ-ỹ\s]{2,50}$/.test(firstPart) &&
-    firstPart.split(/\s+/).length >= 2 &&
-    !hasEmailOrPhone(firstPart);
-
-  if (looksLikeName) {
-    return firstPart;
   }
 
   return "";
@@ -145,9 +134,7 @@ function uniqueStrings(items: string[]) {
 function isFixedSuggestion(question: string) {
   const normalized = normalizeText(question);
 
-  return FIXED_SUGGESTIONS.some(
-    (item) => normalizeText(item) === normalized
-  );
+  return FIXED_SUGGESTIONS.some((item) => normalizeText(item) === normalized);
 }
 
 function getParentFaqQuestions() {
@@ -696,7 +683,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
     maybePromoteConversationTitle(conversationId, question);
 
     const nextUserMessage: Message = {
-      id: messages.length + 1,
+      id: createLocalMessageId(),
       role: "user",
       text: question,
     };
@@ -707,7 +694,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
 
     setTimeout(async () => {
       const botMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: answer,
         images,
@@ -719,7 +706,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       ]);
 
       const askContactMessage: Message = {
-        id: messages.length + 3,
+        id: createLocalMessageId(2),
         role: "bot",
         text: ASK_CONTACT_INFO_REPLY,
       };
@@ -800,13 +787,13 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
     maybePromoteConversationTitle(conversationId, questionText);
 
     const nextUserMessage: Message = {
-      id: messages.length + 1,
+      id: createLocalMessageId(),
       role: "user",
       text: questionText,
     };
 
     const nextBotMessage: Message = {
-      id: messages.length + 2,
+      id: createLocalMessageId(1),
       role: "bot",
       text: botText,
     };
@@ -862,13 +849,13 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       maybePromoteConversationTitle(conversationId, question);
 
       const nextUserMessage: Message = {
-        id: messages.length + 1,
+        id: createLocalMessageId(),
         role: "user",
         text: question,
       };
 
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: botText,
       };
@@ -928,17 +915,35 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
     if (!conversationId) return;
 
     await saveMessageToFirebase({
-      sessionId: conversationId,
-      name: senderName,
-      sessionKey,
-      role: "user",
-      message: value,
-    });
+  sessionId: conversationId,
+  name: senderName,
+  sessionKey,
+  role: "user",
+  message: value,
+});
 
-    maybePromoteConversationTitle(conversationId, value);
+try {
+  await saveExtractedInfoFromMessage({
+    conversationId,
+    messageText: value,
+    customerName: detectedCustomerName || undefined,
+  });
+} catch (error) {
+  console.error("Lỗi khi lưu thông tin trích xuất:", error);
+}
+
+if (detectedCustomerName) {
+  updateConversationMeta(conversationId, (item) => ({
+    ...item,
+    title: detectedCustomerName,
+    updatedAt: Date.now(),
+  }));
+} else {
+  maybePromoteConversationTitle(conversationId, value);
+}
 
     const nextUserMessage: Message = {
-      id: messages.length + 1,
+      id: createLocalMessageId(),
       role: "user",
       text: value,
     };
@@ -952,7 +957,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       const nameReply = getNameReceivedReply(detectedCustomerName);
 
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: nameReply,
       };
@@ -989,7 +994,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
 
     if (hasEmailOrPhone(value)) {
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: CONTACT_RECEIVED_REPLY,
       };
@@ -1036,7 +1041,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       const answerImages = predefinedAnswer?.images || matchedFaq?.images || [];
 
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: answerText,
         images: answerImages,
@@ -1048,7 +1053,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       ]);
 
       const askContactMessage: Message = {
-        id: messages.length + 3,
+        id: createLocalMessageId(2),
         role: "bot",
         text: ASK_CONTACT_INFO_REPLY,
       };
@@ -1113,7 +1118,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
         data.answer || "Xin lỗi, tôi chưa có câu trả lời phù hợp.";
 
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: botAnswer,
       };
@@ -1124,7 +1129,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
       ]);
 
       const askContactMessage: Message = {
-        id: messages.length + 3,
+        id: createLocalMessageId(2),
         role: "bot",
         text: ASK_CONTACT_INFO_REPLY,
       };
@@ -1210,7 +1215,7 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
         "Đã có lỗi xảy ra khi xử lý câu hỏi. Bạn vui lòng thử lại sau.";
 
       const nextBotMessage: Message = {
-        id: messages.length + 2,
+        id: createLocalMessageId(1),
         role: "bot",
         text: errorText,
       };
@@ -1332,7 +1337,10 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    if (typeof window !== "undefined" && window.parent !== window) {
+                    if (
+                      typeof window !== "undefined" &&
+                      window.parent !== window
+                    ) {
                       window.parent.postMessage(
                         { type: "NHANH_CHAT_HIDE_LAUNCHER" },
                         "*"
@@ -1360,7 +1368,10 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    if (typeof window !== "undefined" && window.parent !== window) {
+                    if (
+                      typeof window !== "undefined" &&
+                      window.parent !== window
+                    ) {
                       window.parent.postMessage(
                         { type: "NHANH_CHAT_EXPAND" },
                         "*"

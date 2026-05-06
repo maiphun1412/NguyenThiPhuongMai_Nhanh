@@ -1,18 +1,23 @@
-import { getApp, getApps, initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDcKIOvOsVUSN3uh5TvgpC5teWEthyrhHw",
-  authDomain: "nhanhtravel-website.firebaseapp.com",
-  databaseURL:
-    "https://nhanhtravel-website-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "nhanhtravel-website",
-  storageBucket: "nhanhtravel-website.firebasestorage.app",
-  messagingSenderId: "164568911436",
-  appId: "1:164568911436:web:f3dc16b8232df1cdf52ee9",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db = getDatabase(app);
 
-export { app, db };
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
+export const realtimeDb = getDatabase(
+  app,
+  "https://nhanhtravel-website-default-rtdb.asia-southeast1.firebasedatabase.app"
+);
