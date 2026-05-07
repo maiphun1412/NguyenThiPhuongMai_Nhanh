@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { get, limitToLast, onValue, query, ref } from "firebase/database";
+import {
+  get,
+  limitToLast,
+  onValue,
+  orderByChild,
+  query,
+  ref,
+} from "firebase/database";
 import { realtimeDb } from "../../src/lib/firebase";
 
 type FirebaseMessage = {
@@ -15,6 +22,7 @@ type FirebaseMessage = {
 type FirebaseConversation = {
   createdAt?: number | string;
   updatedAt?: number | string;
+  lastMessageTime?: number | string;
   name?: string;
   customerName?: string;
   phone?: string;
@@ -197,10 +205,11 @@ function normalizeConversation(
       id,
     createdAt: toTime(data.createdAt) || firstMessage?.createdAt || 0,
     updatedAt:
-      toTime(data.updatedAt) ||
-      lastMessage?.createdAt ||
-      firstMessage?.createdAt ||
-      0,
+  toTime(data.lastMessageTime) ||
+  toTime(data.updatedAt) ||
+  lastMessage?.createdAt ||
+  firstMessage?.createdAt ||
+  0,
     messages,
   };
 }
@@ -498,11 +507,11 @@ export default function ExtractedInfoPage() {
     setLoading(true);
     setLoadError("");
 
-    const conversationsRef = query(
-      ref(realtimeDb, CHAT_HISTORY_PATH),
-      limitToLast(50)
-    );
-
+   const conversationsRef = query(
+  ref(realtimeDb, CHAT_HISTORY_PATH),
+  orderByChild("lastMessageTime"),
+  limitToLast(50)
+);
     const unsubscribe = onValue(
       conversationsRef,
       async (snapshot) => {
@@ -535,9 +544,10 @@ export default function ExtractedInfoPage() {
                 phone: extractedInfo?.phone || conversationData.phone,
                 email: extractedInfo?.email || conversationData.email,
                 updatedAt:
-                  extractedInfo?.updatedAt ||
-                  conversationData.updatedAt ||
-                  conversationData.createdAt,
+  extractedInfo?.updatedAt ||
+  conversationData.lastMessageTime ||
+  conversationData.updatedAt ||
+  conversationData.createdAt,
               });
             })
             .filter((item) => item.messages.length > 0)

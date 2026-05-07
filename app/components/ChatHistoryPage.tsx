@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { limitToLast, onValue, query, ref } from "firebase/database";
+import { limitToLast, onValue, orderByChild, query, ref } from "firebase/database";
 import { realtimeDb } from "../../src/lib/firebase";
 
 type FirebaseMessage = {
@@ -15,6 +15,7 @@ type FirebaseMessage = {
 type FirebaseConversation = {
   createdAt?: number | string;
   updatedAt?: number | string;
+  lastMessageTime?: number | string;
   name?: string;
   customerName?: string;
   phone?: string;
@@ -177,10 +178,11 @@ const extractedNameFromMessage =
       id,
     createdAt: toTime(data.createdAt) || firstMessage?.createdAt || 0,
     updatedAt:
-      toTime(data.updatedAt) ||
-      lastMessage?.createdAt ||
-      firstMessage?.createdAt ||
-      0,
+  toTime(data.lastMessageTime) ||
+  toTime(data.updatedAt) ||
+  lastMessage?.createdAt ||
+  firstMessage?.createdAt ||
+  0,
     messages,
   };
 }
@@ -520,8 +522,9 @@ setHighlightEmail(email);
     setLoading(true);
     setLoadError("");
 
-    const conversationsRef = query(
+   const conversationsRef = query(
   ref(realtimeDb, CHAT_HISTORY_PATH),
+  orderByChild("lastMessageTime"),
   limitToLast(50)
 );
 

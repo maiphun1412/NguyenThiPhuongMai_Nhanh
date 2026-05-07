@@ -1,4 +1,4 @@
-import { get, push, ref, set } from "firebase/database";
+import { get, push, ref, set, update } from "firebase/database";
 import { realtimeDb } from "./firebase";
 
 export type FirebaseMessage = {
@@ -32,6 +32,9 @@ export async function saveMessageToFirebase({
   message,
   images = [],
 }: SaveMessageParams) {
+  const now = Date.now();
+
+  const conversationRef = ref(realtimeDb, `${BASE_PATH}/${sessionId}`);
   const messagesRef = ref(realtimeDb, `${BASE_PATH}/${sessionId}/messages`);
   const newMessageRef = push(messagesRef);
 
@@ -41,7 +44,13 @@ export async function saveMessageToFirebase({
     role,
     message,
     images,
-    createdAt: Date.now(),
+    createdAt: now,
+  });
+
+  await update(conversationRef, {
+    name,
+    sessionKey,
+    lastMessageTime: now,
   });
 }
 
