@@ -19,5 +19,5 @@ export const storage = getStorage(app);
 
 export const realtimeDb = getDatabase(
   app,
-  "https://nhanhtravel-website-default-rtdb.asia-southeast1.firebasedatabase.app"
+  "https://nhanhtravel-web-data-default-rtdb.asia-southeast1.firebasedatabase.app"
 );

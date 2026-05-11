@@ -9,9 +9,9 @@ export type ExtractedInfo = {
   updatedAt?: number;
 };
 
-const USER_ID = "maiphuong";
+const USER_ID = "nhanhtravel-chatai";
 
-const BASE_PATH = `nhanhtravel-website/${USER_ID}/extracted-info`;
+const BASE_PATH = `${USER_ID}/extracted-info`;
 
 export function extractContactInfo(text: string): ExtractedInfo {
   if (!text) return {};

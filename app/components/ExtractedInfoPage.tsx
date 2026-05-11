@@ -82,8 +82,9 @@ type ActionMenu = {
   type: "phone" | "email" | "more";
 } | null;
 
-const CHAT_HISTORY_PATH = "nhanhtravel-website/maiphuong/chats";
-const EXTRACTED_INFO_PATH = "nhanhtravel-website/maiphuong/extracted-info";
+const CHAT_HISTORY_PATH = "nhanhtravel-chatai/chats";
+const EXTRACTED_INFO_PATH =
+  "nhanhtravel-chatai/extracted-info";
 const IGNORED_COMPANY_PHONES = ["0909991205", "84909991205"];
 
 function toTime(value: unknown) {

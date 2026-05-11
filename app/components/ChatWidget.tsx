@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import {
   getMessagesFromFirebase,
   saveMessageToFirebase,
+  updateConversationCustomerName,
 } from "../../src/lib/chatService";
+
 import { saveExtractedInfoFromMessage } from "../../src/lib/extracted-info";
 import {
   answerMap,
@@ -921,6 +923,9 @@ export default function ChatWidget({ mode = "popup" }: ChatWidgetProps) {
   role: "user",
   message: value,
 });
+if (detectedCustomerName) {
+  await updateConversationCustomerName(conversationId, detectedCustomerName);
+}
 
 try {
   await saveExtractedInfoFromMessage({

@@ -48,7 +48,7 @@ type ChatConversation = {
 
 type ReadStateMap = Record<string, number>;
 
-const CHAT_HISTORY_PATH = "nhanhtravel-website/maiphuong/chats";
+const CHAT_HISTORY_PATH = "nhanhtravel-chatai/chats";
 const READ_STORAGE_KEY = "nhanh_travel_chat_history_read_state";
 
 function toTime(value: unknown) {

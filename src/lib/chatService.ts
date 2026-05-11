@@ -20,9 +20,9 @@ type SaveMessageParams = {
   images?: string[];
 };
 
-const USER_ID = "maiphuong";
+const USER_ID = "nhanhtravel-chatai";
 
-const BASE_PATH = `nhanhtravel-website/${USER_ID}/chats`;
+const BASE_PATH = `${USER_ID}/chats`;
 
 export async function saveMessageToFirebase({
   sessionId,
@@ -89,7 +89,7 @@ type SaveTrialFormParams = {
   note: string;
 };
 
-const TRIAL_FORM_PATH = `nhanhtravel-website/${USER_ID}/trial-forms`;
+const TRIAL_FORM_PATH = `${USER_ID}/trial-forms`;
 
 export async function saveTrialFormToFirebase({
   conversationId,
@@ -117,5 +117,22 @@ export async function saveTrialFormToFirebase({
     note,
     createdAt: Date.now(),
     status: "new",
+  });
+}
+export async function updateConversationCustomerName(
+  sessionId: string,
+  customerName: string
+) {
+  const cleanName = customerName.trim();
+
+  if (!sessionId || !cleanName) return;
+
+  const conversationRef = ref(realtimeDb, `${BASE_PATH}/${sessionId}`);
+
+  await update(conversationRef, {
+    name: cleanName,
+    customerName: cleanName,
+    updatedAt: Date.now(),
+    lastMessageTime: Date.now(),
   });
 }
